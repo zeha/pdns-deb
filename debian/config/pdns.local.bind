@@ -1,8 +1,5 @@
 # Bind backend configuration
 
-# Uncomment to load the 'example.com' zone for testing:
-# bind-example-zones
-
 # Location of the Bind configuration file to parse. 
 # bind-config=/etc/bind/named.conf.local
 
