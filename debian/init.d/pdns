@@ -19,6 +19,9 @@ SOCKETPATH=/var/run
 
 [ -f "$SBINARYPATH/pdns_server" ] || exit 0
 
+START=no
+RESOLVCONF_UPDATE_FORWARDERS=no
+
 [ -r /etc/default/pdns ] && . /etc/default/pdns
 
 # Make sure that /var/run exists
