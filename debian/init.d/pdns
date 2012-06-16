@@ -27,7 +27,7 @@ RESOLVCONF_UPDATE_FORWARDERS=no
 # Make sure that /var/run exists
 mkdir -p $SOCKETPATH
 cd $SOCKETPATH
-suffix=`basename $0 | awk -F- '{print $2}'`
+suffix=$(basename $0 | cut -d- -f2- -s)
 if [ $suffix ] 
 then
 	EXTRAOPTS=--config-name=$suffix
@@ -89,11 +89,18 @@ case "$1" in
 	;;		
 
 	force-reload | restart)
-		echo -n "Restarting PowerDNS authoritative nameserver: "
-		echo -n stopping and waiting.. 
-		doPC quit || NOTRUNNING=$?
-		sleep 3
-		echo done
+                echo -n "Restarting PowerDNS authoritative nameserver: "
+                if test "$NOTRUNNING" = "1"
+                then
+                        echo "not running, starting"
+                else
+
+                        echo -n stopping and waiting..
+                        doPC quit
+                        sleep 3
+                        echo done
+                fi
+                $0 start
 		$0 start
 	;;
 
