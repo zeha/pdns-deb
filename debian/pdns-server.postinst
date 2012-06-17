@@ -61,7 +61,7 @@ case "$1" in
     # configuration files and then drop root privileges.
     if [ -z "$2" ]; then
       chmod 0600 $PDNSCONF $PDNSLOCAL
-      chmod 0700 $PDNSDIR
+      chmod 0755 $PDNSDIR
     fi
   ;;
 
