@@ -8,7 +8,6 @@ set -e
 . /usr/share/debconf/confmodule
 
 PDNSCONF=/etc/powerdns/pdns.conf
-PDNSDEFAULT=/etc/default/pdns
 if [ -e $PDNSCONF ]; then
   PDNSDIR=`cat $PDNSCONF | grep include | awk -F '=' '{print $2}'`
 fi
@@ -20,7 +19,6 @@ PDNSLOCAL=$PDNSDIR/pdns.local
 # Temporary files
 PDNSCONFTEMP=`mktemp`
 PDNSLOCALTEMP=`mktemp`
-PDNSDEFAULTTEMP=`mktemp`
 
 case "$1" in
   configure)
@@ -36,7 +34,6 @@ case "$1" in
     # Fill the temporary files with config items.
     cat /usr/share/pdns-server/pdns.conf > $PDNSCONFTEMP
     cat /usr/share/pdns-server/pdns.local > $PDNSLOCALTEMP
-    cat /usr/share/pdns-server/pdns > $PDNSDEFAULTTEMP
 
     # Do we listen on a specified address
     db_get pdns-server/localaddress || true
@@ -50,23 +47,15 @@ case "$1" in
       sed -i -e "s|^\(#\)\?\(# \)\?allow-recursion=.*$|allow-recursion=$RET|" $PDNSCONFTEMP
     fi
 
-    # Start on boot ?
-    db_get pdns-server/autostart || true
-    [ -z "$RET" ] && RET=false
-    if [ "$RET" = "true" ]; then
-      sed -i -e "s/^START=.*$/START=yes/" $PDNSDEFAULTTEMP
-    fi
-
     # Install the new configuration files if the user wants it.
     ucf --debconf-ok $PDNSCONFTEMP $PDNSCONF
-    ucf --debconf-ok $PDNSDEFAULTTEMP $PDNSDEFAULT
     ucf --debconf-ok $PDNSLOCALTEMP $PDNSLOCAL
 
     # Stop the debconf stuff
     db_stop || true
 
     # Clean up temporary files.
-    rm -f $PDNSCONFTEMP $PDNSDEFAULTTEMP $PDNSLOCALTEMP
+    rm -f $PDNSCONFTEMP $PDNSLOCALTEMP
 
     # There could be passwords in these files. PowerDNS first reads the
     # configuration files and then drop root privileges.

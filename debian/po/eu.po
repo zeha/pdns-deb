@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: pdns@packages.debian.org\n"
-"POT-Creation-Date: 2009-10-28 07:02+0100\n"
+"POT-Creation-Date: 2012-06-17 13:40+0000\n"
 "PO-Revision-Date: 2009-10-29 09:31+0200\n"
 "Last-Translator: Piarres Beobide <pi@beobide.net>\n"
 "Language-Team: Euskara <debian-l10n-basque@lists.debian.org\n"
@@ -35,31 +35,15 @@ msgstr ""
 "SE-ak kanporako paketeetan okerreko IP helbidea hautatzea, beraz "
 "gomendagarria da PowerDNS IP zehatz batera hemen lotzea."
 
-#. Type: boolean
-#. Description
-#: ../pdns-server.templates:2001
-msgid "Do you want to start the PowerDNS server automatically?"
-msgstr "PowerDNS zerbitzaria automatikoki abiaraztea nahi al duzu?"
-
-#. Type: boolean
-#. Description
-#: ../pdns-server.templates:2001
-msgid ""
-"If you accept here, an initscript will be used to automatically start the "
-"PowerDNS authoritative nameserver."
-msgstr ""
-"Hemen onartuaz hasiera-script bat erabiliko da PowerDNS izen-zerbitzaria "
-"automatikoki abiarazteko."
-
 #. Type: string
 #. Description
-#: ../pdns-server.templates:3001
+#: ../pdns-server.templates:2001
 msgid "List of subnets that are allowed to recurse:"
 msgstr "Errekurtsoa erbaili dezaketen azpisare zerrenda:"
 
 #. Type: string
 #. Description
-#: ../pdns-server.templates:3001
+#: ../pdns-server.templates:2001
 msgid ""
 "Enter here, comma separated, the subnets that are allowed to recurse. "
 "Allowed values are 127.0.0.1 for an ip address and 192.168.0.0/24 for a "
@@ -68,3 +52,13 @@ msgstr ""
 "IDatzi hemen, gakoz bereizirik errekurtsoa erabili dezateken azpisareak. "
 "Onartzen diren balio formatua 127.0.0.1 ip helbideeentzat eta 192.168.0.0/24 "
 "azpisareentzat."
+
+#~ msgid "Do you want to start the PowerDNS server automatically?"
+#~ msgstr "PowerDNS zerbitzaria automatikoki abiaraztea nahi al duzu?"
+
+#~ msgid ""
+#~ "If you accept here, an initscript will be used to automatically start the "
+#~ "PowerDNS authoritative nameserver."
+#~ msgstr ""
+#~ "Hemen onartuaz hasiera-script bat erabiliko da PowerDNS izen-zerbitzaria "
+#~ "automatikoki abiarazteko."

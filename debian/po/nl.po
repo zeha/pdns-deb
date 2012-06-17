@@ -8,29 +8,30 @@
 # or http://www.debian.org/intl/l10n/po-debconf/README-trans
 # Developers do not need to manually edit POT or PO files.
 # , fuzzy
-# 
-# 
+#
+#
 msgid ""
 msgstr ""
 "Project-Id-Version: pdns 2.9.18-2\n"
-"Report-Msgid-Bugs-To: powerdns-debian@workaround.org\n"
-"POT-Creation-Date: 2006-05-11 21:20+0200\n"
+"Report-Msgid-Bugs-To: pdns@packages.debian.org\n"
+"POT-Creation-Date: 2012-06-17 13:40+0000\n"
 "PO-Revision-Date: 2006-05-11 21:38+0200\n"
 "Last-Translator: Matthijs Mohlmann <matthijs@cacholong.nl>\n"
 "Language-Team: Debian l10n Dutch <debian-l10n-dutch@lists.debian.org>\n"
+"Language: \n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit"
+"Content-Transfer-Encoding: 8bit\n"
 
 #. Type: string
 #. Description
-#: ../pdns-server.templates:3
+#: ../pdns-server.templates:1001
 msgid "IP address where PowerDNS should listen on:"
 msgstr "IP-adres waar PowerDNS op moet luisteren:"
 
 #. Type: string
 #. Description
-#: ../pdns-server.templates:3
+#: ../pdns-server.templates:1001
 msgid ""
 "If you have multiple IPs, the default behaviour of binding to all addresses "
 "can cause the OS to select the wrong IP for outgoing packets, so it is "
@@ -41,31 +42,15 @@ msgstr ""
 "verkeerde IP-adres kiest voor uitgaande pakketten. Daarom is het aan te "
 "raden om PowerDNS op een specifiek IP-adres te laten luisteren."
 
-#. Type: boolean
-#. Description
-#: ../pdns-server.templates:11
-msgid "Do you want to start the PowerDNS server automatically?"
-msgstr "Wilt u PowerDNS automatisch laten starten?"
-
-#. Type: boolean
-#. Description
-#: ../pdns-server.templates:11
-msgid ""
-"If you accept here, an initscript will be used to automatically start the "
-"PowerDNS authoritative nameserver."
-msgstr ""
-"Als u bevestigend antwoordt op deze dialoog, dan zal er een opstartscript "
-"gebruikt worden om PowerDNS automatisch te starten."
-
 #. Type: string
 #. Description
-#: ../pdns-server.templates:18
+#: ../pdns-server.templates:2001
 msgid "List of subnets that are allowed to recurse:"
 msgstr "Subnetten vanwaar recursieve query's worden uitgevoerd:"
 
 #. Type: string
 #. Description
-#: ../pdns-server.templates:18
+#: ../pdns-server.templates:2001
 msgid ""
 "Enter here, comma separated, the subnets that are allowed to recurse. "
 "Allowed values are 127.0.0.1 for an ip address and 192.168.0.0/24 for a "
@@ -75,3 +60,12 @@ msgstr ""
 "mogen uitvoeren. Toegestane waarden zijn 127.0.0.1 voor een IP-adres en "
 "192.168.0.0/24 voor een subnet."
 
+#~ msgid "Do you want to start the PowerDNS server automatically?"
+#~ msgstr "Wilt u PowerDNS automatisch laten starten?"
+
+#~ msgid ""
+#~ "If you accept here, an initscript will be used to automatically start the "
+#~ "PowerDNS authoritative nameserver."
+#~ msgstr ""
+#~ "Als u bevestigend antwoordt op deze dialoog, dan zal er een opstartscript "
+#~ "gebruikt worden om PowerDNS automatisch te starten."

@@ -5,11 +5,12 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: pdns\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2007-01-13 20:04+0100\n"
+"Report-Msgid-Bugs-To: pdns@packages.debian.org\n"
+"POT-Creation-Date: 2012-06-17 13:40+0000\n"
 "PO-Revision-Date: 2007-03-07 00:36+0100\n"
 "Last-Translator: Jacobo Tarrio <jtarrio@debian.org>\n"
 "Language-Team: Galician <proxecto@trasno.net>\n"
+"Language: gl\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -33,31 +34,15 @@ msgstr ""
 "para os paquetes saíntes, polo que se recomenda ligar PowerDNS a un enderezo "
 "IP determinado."
 
-#. Type: boolean
-#. Description
-#: ../pdns-server.templates:2001
-msgid "Do you want to start the PowerDNS server automatically?"
-msgstr "¿Quere iniciar o servidor PowerDNS automaticamente?"
-
-#. Type: boolean
-#. Description
-#: ../pdns-server.templates:2001
-msgid ""
-"If you accept here, an initscript will be used to automatically start the "
-"PowerDNS authoritative nameserver."
-msgstr ""
-"Se acepta esta opción, hase empregar un script de inicio para iniciar "
-"automaticamente o servidor de nomes con autoridade PowerDNS."
-
 #. Type: string
 #. Description
-#: ../pdns-server.templates:3001
+#: ../pdns-server.templates:2001
 msgid "List of subnets that are allowed to recurse:"
 msgstr "Lista de subredes ás que se lle permite facer recursión:"
 
 #. Type: string
 #. Description
-#: ../pdns-server.templates:3001
+#: ../pdns-server.templates:2001
 msgid ""
 "Enter here, comma separated, the subnets that are allowed to recurse. "
 "Allowed values are 127.0.0.1 for an ip address and 192.168.0.0/24 for a "
@@ -66,3 +51,13 @@ msgstr ""
 "Introduza aquí, separadas por comas, as subredes ás que se lle permite facer "
 "recursión. Admítense os valores 127.0.0.1 para un enderezo IP e "
 "192.168.0.0/24 para unha subrede."
+
+#~ msgid "Do you want to start the PowerDNS server automatically?"
+#~ msgstr "¿Quere iniciar o servidor PowerDNS automaticamente?"
+
+#~ msgid ""
+#~ "If you accept here, an initscript will be used to automatically start the "
+#~ "PowerDNS authoritative nameserver."
+#~ msgstr ""
+#~ "Se acepta esta opción, hase empregar un script de inicio para iniciar "
+#~ "automaticamente o servidor de nomes con autoridade PowerDNS."
