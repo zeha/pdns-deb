@@ -1,8 +1,12 @@
 remove-rpath-ldflags-patch
 addconfigdir 
 hurd-ftbfs-patch
-fix-mongodb-backend-patch
+#fix-mongodb-backend-patch
 traceback-handler
 supermaster-race-2575
 conditional-system-polarssl
 #system-polar
+upstream-2608
+upstream-2609+2612
+upstream-2611
+upstream-2622
