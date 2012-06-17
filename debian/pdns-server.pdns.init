@@ -53,12 +53,14 @@ fi
 # function to invoke properly parametrized pdns_control
 doPC()
 {
-	return $($BINARYPATH/pdns_control $SUFFIX $1 $2 2> /dev/null)
+	pdns_control $SUFFIX $1 $2 2> /dev/null
+	return $?
 }
 
 isrunning()
 {
-	return doPC ping
+	doPC ping > /dev/null
+	return $?
 }
 
 #
@@ -70,7 +72,9 @@ do_start()
         #   0 if daemon has been started
         #   1 if daemon was already running
         #   2 if daemon could not be started
-	isrunning || return 1
+	if isrunning; then
+		return 1
+	fi
         start-stop-daemon --start --quiet \
 		--pidfile $PIDFILE --exec $DAEMON -- \
                 $DAEMON_ARGS --daemon --guardian=yes \
@@ -87,13 +91,14 @@ do_stop()
         #   1 if daemon was already stopped
         #   2 if daemon could not be stopped
         #   other if a failure occurred
-        doPC quit
+        doPC quit >/dev/null
 	RETVAL="2"
 	for sec in $(seq 1 5); do
-		if !isrunning; then
+		if ! isrunning; then
 			RETVAL="0"
 			break
 		fi
+		sleep 1
 	done
         [ "$RETVAL" = 2 ] && return 2
         rm -f $PIDFILE
@@ -126,7 +131,8 @@ case "$1" in
 	;;	
   force-stop)
 	[ "$VERBOSE" != no ] && log_daemon_msg "Killing $ODESC (all instances)" "$NAME"
-	case kill -9 $(pidof pdns_server) in
+	kill -9 $(pidof pdns_server)
+	case "$?" in
 		0) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
 		1) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
 	esac
@@ -149,15 +155,16 @@ case "$1" in
                 ;;
         esac
         ;;
-  reload) 
+  reload|force-reload) 
 	log_daemon_msg "Reloading $DESC" "$NAME"
 	if isrunning; then
-	  case doPC cycle in
+	  doPC cycle >/dev/null
+	  case "$?" in
 		0) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
 		1) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
 	  esac
 	else
-	  log_end_msg 0;;
+	  log_end_msg 0
 	fi
 	;;		
   monitor)
@@ -169,48 +176,48 @@ case "$1" in
 	;;		
   dump)
 	if isrunning; then
-		echo $(doPC list)
+		doPC list
 	else
 		echo "not running"
 	fi 
 	;;		
   show)
-	if [ $# -lt 2 ]; then
+	if isrunning; then
+		if [ $# -lt 2 ]; then
 			echo "Insufficient parameters"
 			exit 1
-	fi 
-	if isrunning; then
+		fi
 		echo -n "$2="
-		doPC show $2 ; echo $ret
+		doPC show $2
 	else
 		echo "not running"
 	fi 
 	;;		
   mrtg)
-	if [ $# -lt 2 ]; then
+	if isrunning; then
+		if [ $# -lt 2 ]; then
 			echo "Insufficient parameters"
 			exit 1
-	fi 
-	if isrunning; then
-		echo $(doPC show $2)
+		fi 
+		doPC show $2
 		if [ "$3x" != "x" ]; then
-			echo $(doPC show $3)
+			doPC show $3
 		else
 			echo 0
 		fi
-		echo $(doPC uptime)
+		doPC uptime
 		echo "$DESC"
 	else
 		echo "not running"
 	fi 
 	;;		
   cricket)
-	if [ $# -lt 2 ]; then
+	if isrunning; then
+		if [ $# -lt 2 ]; then
 			echo "Insufficient parameters"
 			exit 1
-	fi 
-	if isrunning; then
-		echo $(doPC show $2)
+		fi 
+		doPC show $2
 	else
 		echo "not running"
 	fi 
