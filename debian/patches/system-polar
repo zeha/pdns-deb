@@ -1,3 +1,9 @@
+Description: Use system polarssl
+  Use the system-installed PolarSSL instead of the local convenience
+  copy. Upstream has a more elegant version pending
+Forwarded: http://wiki.powerdns.com/trac/ticket/457
+Author: Evgeni Golov
+
 Index: debian-pdns/pdns/Makefile.am
 ===================================================================
 --- debian-pdns.orig/pdns/Makefile.am	2012-05-12 15:59:29.618509544 +0200

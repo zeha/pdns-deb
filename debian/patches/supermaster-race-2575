@@ -1,3 +1,7 @@
+Description: Upstream patch: fix supermaster race condition
+  Fix a supermaster race condition
+Origin: upstream
+Forwarded: http://wiki.powerdns.com/trac/ticket/498
 --- a/pdns/packethandler.cc
 +++ b/pdns/packethandler.cc
 @@ -778,7 +778,13 @@

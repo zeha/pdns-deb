@@ -1,3 +1,8 @@
+Description: Upstream patch: traceback-handler
+  Add a traceback-handler option to allow cores to be seen
+Origin: upstream
+Forwarded: http://wiki.powerdns.com/trac/ticket/497
+
 --- a/pdns/common_startup.cc
 +++ b/pdns/common_startup.cc
 @@ -135,6 +135,8 @@

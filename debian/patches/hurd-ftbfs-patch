@@ -1,3 +1,7 @@
+Description: add MAXHOSTNAMELEN
+  .... to allow building on Hurd
+Origin: Debian
+Forwarded: http://wiki.powerdns.com/trac/ticket/500
 --- a/pdns/misc.cc
 +++ b/pdns/misc.cc
 @@ -25,6 +25,9 @@

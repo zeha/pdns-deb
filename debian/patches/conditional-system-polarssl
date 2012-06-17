@@ -1,3 +1,9 @@
+Description: Use system polarssl
+  Use the system-installed PolarSSL instead of the local convenience
+  copy. Upstream has a more elegant version pending
+Forwarded: http://wiki.powerdns.com/trac/ticket/457
+Author: Evgeni Golov
+
 Index: debian-pdns/configure.ac
 ===================================================================
 --- debian-pdns.orig/configure.ac	2012-05-13 16:22:10.000000000 +0200

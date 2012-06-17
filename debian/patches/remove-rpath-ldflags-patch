@@ -1,3 +1,6 @@
+Description: remove rpath and ldflags
+Origin: Debian
+Forwarded: http://wiki.powerdns.com/trac/ticket/499
 --- a/pdns/Makefile.am
 +++ b/pdns/Makefile.am
 @@ -51,7 +51,7 @@

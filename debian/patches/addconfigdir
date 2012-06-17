@@ -1,3 +1,7 @@
+Description: Add include directive
+Forwarded: http://wiki.powerdns.com/trac/ticket/466
+Origin: Debian
+
 --- a/pdns/arguments.cc
 +++ b/pdns/arguments.cc
 @@ -312,9 +312,12 @@
