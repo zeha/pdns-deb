@@ -18,6 +18,7 @@ case "$1" in
     rm -f /etc/powerdns/pdns.conf
     rm -f /etc/default/pdns
     rm -f /etc/powerdns/pdns.d/pdns.local
+    rm -f /etc/powerdns/pdns.d/bindbackend.conf
     if [ -x /usr/bin/ucf ]; then
       ucf --purge /etc/powerdns/pdns.conf
       ucf --purge /etc/default/pdns

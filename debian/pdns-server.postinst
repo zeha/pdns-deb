@@ -63,6 +63,15 @@ case "$1" in
       chmod 0600 $PDNSCONF $PDNSLOCAL
       chmod 0755 $PDNSDIR
     fi
+    
+    # If we still have the default config, make sure bindbackend.conf exists
+    PDNSBIND="/etc/powerdns/pdns.d/pdns.simplebind"
+    PDNSBINDBACKENDCONF="/etc/powerdns/bindbackend.conf"
+    if [ -e "$PDNSBIND" ]; then
+      if grep -q "^bind-config=$PDNSBINDBACKENDCONF$" $PDNSBIND; then
+        touch $PDNSBINDBACKENDCONF
+      fi
+    fi
   ;;
 
   triggered)

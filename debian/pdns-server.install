@@ -6,3 +6,4 @@ debian/config/pdns.conf usr/share/pdns-server/
 debian/config/pdns.local usr/share/pdns-server/
 debian/resolvconf/pdns etc/resolvconf/update.d/
 debian/insserv.d/pdns-server etc/insserv.d/
+debian/pdns.simplebind etc/powerdns/pdns.d/
