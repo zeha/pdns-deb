@@ -1,3 +1,9 @@
+pdns (3.1-2.0) UNRELEASED; urgency=low
+
+  * NOT YET RELEASED
+
+ -- Marc Haber <mh+debian-packages@zugschlus.de>  Sat, 23 Jun 2012 23:33:50 +0200
+
 pdns (3.1-2) unstable; urgency=low
 
   * move development to Alioth (Maint address, Vcs-Foo)
