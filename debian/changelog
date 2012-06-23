@@ -1,6 +1,20 @@
-pdns (3.1-1.0) UNRELEASED; urgency=low
+pdns (3.1-2) unstable; urgency=low
 
-  * NOT YET RELEASED
+  * move development to Alioth (Maint address, Vcs-Foo)
+  * remove bind-example-zones.
+    Thanks to Andreas Olsson (Closes: 676823)
+  * init script:
+    * adapt logic changes from upstream
+    * LSBize init script from debian's skeleton
+    * use automatic init script installation
+  * add upstream changesets (recommended by upstream):
+    2608, 2609+2612, 2611, 2622
+  * add DEP-3 headers to patches
+  * disable mongodb patch, we're not building mongodb anyway
+  * remove autostart debconf question, templates and code
+  * relax privileges on pdns.d directory
+  * add a simple bind backend config so that we can run immediately
+  * remove hurd-ftbfs-patch, it was already applied upstream (r2307)
 
  -- Marc Haber <mh+debian-packages@zugschlus.de>  Mon, 14 May 2012 21:14:38 +0200
 
@@ -27,8 +41,6 @@ pdns (3.1-1) unstable; urgency=low
   [ Evgeni Golov ]
   * use system libpolarssl if present, local copy otherwise.
     Closes: #671856, #656861
-
-  [ Marc Haber ]
 
  -- Marc Haber <mh+debian-packages@zugschlus.de>  Fri, 11 May 2012 23:51:27 +0200
 
