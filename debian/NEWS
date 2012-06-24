@@ -1,0 +1,13 @@
+pdns (3.1-3) unstable; urgency=low
+
+pdns now ships an empty, but activated bind backend so that the daemon
+can launch immediately. Since PowerDNS only allows a single launch
+statement (see http://wiki.powerdns.com/trac/ticket/502), you need to
+adapt either the new simplebind configuration or your custom
+configuration.
+
+PowerDNS will not flag multiple launch statements as an error, but it
+will only honor one of them. Be aware of that if your PowerDNS
+complains about configuration for a not enabled backend.
+
+ -- Marc Haber <mh+debian-packages@zugschlus.de>  Sun, 24 Jun 2012 11:11:27 +0200
