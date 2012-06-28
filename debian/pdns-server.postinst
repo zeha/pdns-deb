@@ -66,6 +66,7 @@ case "$1" in
     if [ -z "$2" ]; then
       chmod 0600 $PDNSCONF $PDNSLOCAL
       chmod 0755 $PDNSDIR
+      chmod 0644 $PDNSDEFAULT
     fi
     
     # If we still have the default config, make sure bindbackend.conf exists
