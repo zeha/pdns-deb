@@ -1,6 +1,9 @@
-pdns (3.1-4.0) UNRELEASED; urgency=low
+pdns (3.1-5) experimental; urgency=low
 
-  * NOT YET RELEASED
+  * remove --with autotools-dev (see dh-autoreconf(7))
+  * zap dnslabeltext.cc in clean (see Upstream #554)
+  * apply patch from darix to build with botan (see Upstream #555).
+    This might address #675410, thanks to Florian Obser.
 
  -- Marc Haber <mh+debian-packages@zugschlus.de>  Fri, 29 Jun 2012 14:21:43 +0200
 
