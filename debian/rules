@@ -39,3 +39,9 @@ override_dh_fixperms:
 # init script needs to be named pdns, not pdns-server
 override_dh_installinit:
 	dh_installinit --name=pdns
+
+
+# we need to zap generated files
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -f pdns/backends/bind/dnslabeltext.cc
