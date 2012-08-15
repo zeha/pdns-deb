@@ -25,6 +25,7 @@ override_dh_auto_configure:
 		--with-mysql-lib=/usr/lib/$(DEB_HOST_MULTIARCH) \
 		--with-boost=/usr \
 		--enable-cryptopp \
+		--enable-botan1.10 \
 		--disable-recursor
 
 # pdns-server has a debug package
