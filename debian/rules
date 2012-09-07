@@ -30,7 +30,7 @@ override_dh_auto_configure:
 
 override_dh_auto_build:
 	make
-	make dnsreplay dnsscope dnswasher
+	cd pdns && make dnsreplay dnsscope dnswasher
 
 # pdns-server has a debug package
 override_dh_strip:
