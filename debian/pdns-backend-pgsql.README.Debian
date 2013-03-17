@@ -1,15 +1,22 @@
 Instructions on setting up PostgreSQL as a backend for PowerDNS
 ---------------------------------------------------------------
 
-Please find a database schema for PostgreSQL in
-/usr/share/doc/pdns-backend-pgsql/pgsql.sql
+PowerDNS uses dbconfig-common. The database backends offer you to
+automatically create and maintain the databases for you. If you choose
+yes, you're fine, no more action needed.
 
-Just create a database using 'createdb' and then feed these SQL commands to
-PostgreSQL to get some defaults to start with:
+Should you decide to create your databases yourself, for example, if
+you decide to use a non-standard schema, please find the database
+schema recommended by Upstream for PostgreSQL in
+/usr/share/dbconfig-common/data/pdns-backend-pgsql/install/pgsql
 
-   psql -h <host> -U <user> <database> -f pgsql.sql
+Just create a database using 'createdb' (for example named pdns) and
+then feed these SQL commands to PostgreSQL to get some defaults to
+start with:
 
-Then add further records to the database.
+   psql -h <host> -U <user> <database> -f /usr/share/dbconfig-common/data/pdns-backend-pgsql/install/pgsql
+
+Then add your data to the database.
 
 *** SSL WARNING ***
 Please note that SSL connections to a PostgreSQL database currently do not
