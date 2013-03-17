@@ -5,4 +5,4 @@ debian/manpage/dnsreplay.8
 debian/manpage/dnsscope.8
 debian/manpage/dnswasher.8
 debian/manpage/pdnssec.8
-debian/manpage/zone2ldap.8
+
