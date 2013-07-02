@@ -5,11 +5,17 @@ pdns (3.3rc2-0+exp1) experimental; urgency=low
       might address #675410, thanks to Florian Obser and Marcus
       'darix' Rueckert.
     * fix ECDSA (upstream patch 3036). (Closes: #697904)
-  * refresh patches, remove obsolete patches
+    * sqlite backend removed upstream. Suggest migration to sqlite3
+    * remove --disable-recursor, it's a no-op anyway
+    * build with --enable-tools and --enable-unit-tests
+    * remove local manpages that have been incorporated upstream
+    * remove lazy-recursion from default config
+    * refresh patches, remove obsolete patches
+  * disable dnssec in default configuration to not break updates
   * upstream now has include-dir. Use it, remove our patch for include
   * remove --with autotools-dev (see dh-autoreconf(7))
   * zap dnslabeltext.cc in clean (see Upstream #554)
-  * make dnsreplay dnswasher and dnsscope
+  * ship dnsreplay, dnswasher and dnsscope
 
  -- Marc Haber <mh+debian-packages@zugschlus.de>  Fri, 29 Jun 2012 14:21:43 +0200
 
