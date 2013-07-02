@@ -1,3 +1,14 @@
+pdns (3.3rc2-0+exp1) experimental; urgency=low
+
+  The sqlite backend was removed upstream in PowerDNS 3.3. If you're
+  using this backend, it is strongly recommended that you migrate to
+  sqlite3 or to an entirely different backend. Sorry, there is
+  currently no automated migration path. I will accept a tested and
+  documented patch for the package if you would like to contribute
+  one.
+
+ -- Marc Haber <mh+debian-packages@zugschlus.de>  Tue, 02 Jul 2013 07:40:36 +0000
+
 pdns (3.1-3) unstable; urgency=low
 
   pdns now ships an empty, but activated bind backend so that the daemon
