@@ -4,7 +4,7 @@ Origin: Debian
 
 --- a/pdns/arguments.cc
 +++ b/pdns/arguments.cc
-@@ -312,9 +312,12 @@
+@@ -319,9 +319,12 @@ void ArgvMap::parseOne(const string &arg
      if(pos && pos!=string::npos) 
        val=val.substr(pos);
  
@@ -19,7 +19,7 @@ Origin: Debian
        if(!lax)
          throw ArgException("Trying to set unexisting parameter '"+var+"'");
    }
-@@ -341,6 +344,35 @@
+@@ -349,6 +352,35 @@ void ArgvMap::preParse(int &argc, char *
    }
  }
  
@@ -65,17 +65,17 @@ Origin: Debian
  #include "misc.hh"
  #include "ahuexception.hh"
  #ifndef WIN32
-@@ -83,6 +84,7 @@
+@@ -83,6 +84,7 @@ public:
    }
    void preParse(int &argc, char **argv, const string &arg); //!< use this to preparse a single var
    bool preParseFile(const char *fname, const string &arg, const string& theDefault=""); //!< use this to preparse a single var in configuration
 +  bool preParseDir(const string &dir, const string &arg, bool lax); //!< use this to include a directory
  
    bool file(const char *fname, bool lax=false); //!< Parses a file with parameters
-   bool laxFile(const char *fname) 
+   bool file(const char *fname, bool lax, bool included); 
 --- a/pdns/common_startup.cc
 +++ b/pdns/common_startup.cc
-@@ -64,6 +64,7 @@
+@@ -64,6 +64,7 @@ void declareArguments()
    ::arg().set("version-string","PowerDNS version in packets - full, anonymous, powerdns or custom")="full"; 
    ::arg().set("control-console","Debugging switch - don't use")="no"; // but I know you will!
    ::arg().set("fancy-records","Process URL and MBOXFW records")="no";
@@ -85,7 +85,7 @@ Origin: Debian
    ::arg().set("default-soa-name","name to insert in the SOA record if none set in the backend")="a.misconfigured.powerdns.server";
 --- a/pdns/pdnssec.cc
 +++ b/pdns/pdnssec.cc
-@@ -50,6 +50,7 @@
+@@ -109,6 +109,7 @@ void loadMainConfig(const std::string& c
    ::arg().set("launch","Which backends to launch");
    ::arg().set("dnssec","if we should do dnssec")="true";
    ::arg().set("config-name","Name of this virtual configuration - will rename the binary image")=g_vm["config-name"].as<string>();

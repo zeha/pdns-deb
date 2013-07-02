@@ -1,14 +1,2 @@
-upstream-3036
 remove-rpath-ldflags-patch
 addconfigdir 
-#fix-mongodb-backend-patch
-traceback-handler
-supermaster-race-2575
-conditional-system-polarssl
-#system-polar
-upstream-2608
-upstream-2609+2612
-upstream-2611
-upstream-2622
-upstream-2720
-botan-autofoo
