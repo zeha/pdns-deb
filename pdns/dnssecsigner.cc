@@ -1,6 +1,6 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2001 - 2011  PowerDNS.COM BV
+    Copyright (C) 2001 - 2012  PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2 as 
@@ -20,6 +20,7 @@
 #include <boost/foreach.hpp>
 #include "md5.hh"
 #include "dnsseckeeper.hh"
+#include "dns_random.hh"
 #include "lock.hh"
 
 /* this is where the RRSIGs begin, keys are retrieved,
@@ -29,19 +30,20 @@ int getRRSIGsForRRSET(DNSSECKeeper& dk, const std::string& signer, const std::st
 {
   if(toSign.empty())
     return -1;
+  uint32_t startOfWeek = getStartOfWeek();
   RRSIGRecordContent rrc;
   rrc.d_type=signQType;
 
   rrc.d_labels=countLabels(signQName); 
   rrc.d_originalttl=signTTL; 
-  rrc.d_siginception=getCurrentInception();;
-  rrc.d_sigexpire = rrc.d_siginception + 14*86400; // XXX should come from zone metadata
-  rrc.d_signer = toLower(signer);
+  rrc.d_siginception=startOfWeek - 7*86400; // XXX should come from zone metadata
+  rrc.d_sigexpire=startOfWeek + 14*86400;
+  rrc.d_signer = signer.empty() ? "." : toLower(signer);
   rrc.d_tag = 0;
   
   // we sign the RRSET in toSign + the rrc w/o hash
   
-  DNSSECKeeper::keyset_t keys = dk.getKeys(rrc.d_signer);
+  DNSSECKeeper::keyset_t keys = dk.getKeys(signer); // we don't want the . for the root!
   vector<DNSSECPrivateKey> KSKs, ZSKs;
   vector<DNSSECPrivateKey>* signingKeys;
   
@@ -76,7 +78,7 @@ int getRRSIGsForRRSET(DNSSECKeeper& dk, const std::string& signer, const std::st
 // this is the entrypoint from DNSPacket
 void addSignature(DNSSECKeeper& dk, DNSBackend& db, const std::string& signer, const std::string signQName, const std::string& wildcardname, uint16_t signQType, 
   uint32_t signTTL, DNSPacketWriter::Place signPlace, 
-  vector<shared_ptr<DNSRecordContent> >& toSign, vector<DNSResourceRecord>& outsigned)
+  vector<shared_ptr<DNSRecordContent> >& toSign, vector<DNSResourceRecord>& outsigned, uint32_t origTTL)
 {
   //cerr<<"Asked to sign '"<<signQName<<"'|"<<DNSRecordContent::NumberToType(signQType)<<", "<<toSign.size()<<" records\n";
   if(toSign.empty())
@@ -84,7 +86,7 @@ void addSignature(DNSSECKeeper& dk, DNSBackend& db, const std::string& signer, c
   vector<RRSIGRecordContent> rrcs;
   if(dk.isPresigned(signer)) {
     //cerr<<"Doing presignatures"<<endl;
-    dk.getPreRRSIGs(db, signer, signQName, QType(signQType), signPlace, outsigned); // does it all
+    dk.getPreRRSIGs(db, signer, signQName, wildcardname, QType(signQType), signPlace, outsigned, origTTL); // does it all
   }
   else {
     if(getRRSIGsForRRSET(dk, signer, wildcardname.empty() ? signQName : wildcardname, signQType, signTTL, toSign, rrcs, signQType == QType::DNSKEY) < 0)  {
@@ -95,7 +97,10 @@ void addSignature(DNSSECKeeper& dk, DNSBackend& db, const std::string& signer, c
     DNSResourceRecord rr;
     rr.qname=signQName;
     rr.qtype=QType::RRSIG;
-    rr.ttl=signTTL;
+    if(origTTL)
+      rr.ttl=origTTL;
+    else
+      rr.ttl=signTTL;
     rr.auth=false;
     rr.d_place = (DNSResourceRecord::Place) signPlace;
     BOOST_FOREACH(RRSIGRecordContent& rrc, rrcs) {
@@ -106,8 +111,10 @@ void addSignature(DNSSECKeeper& dk, DNSBackend& db, const std::string& signer, c
   toSign.clear();
 }
 
-static pthread_mutex_t g_signatures_lock = PTHREAD_MUTEX_INITIALIZER;
-static map<pair<string, string>, string> g_signatures;
+static pthread_rwlock_t g_signatures_lock = PTHREAD_RWLOCK_INITIALIZER;
+typedef map<pair<string, string>, string> signaturecache_t;
+static signaturecache_t g_signatures;
+static int g_cacheweekno;
 
 void fillOutRRSIG(DNSSECPrivateKey& dpk, const std::string& signQName, RRSIGRecordContent& rrc, vector<shared_ptr<DNSRecordContent> >& toSign) 
 {
@@ -115,31 +122,34 @@ void fillOutRRSIG(DNSSECPrivateKey& dpk, const std::string& signQName, RRSIGReco
   const DNSCryptoKeyEngine* rc = dpk.getKey();
   rrc.d_tag = drc.getTag();
   rrc.d_algorithm = drc.d_algorithm;
-
   
   string msg=getMessageForRRSET(signQName, rrc, toSign); // this is what we will hash & sign
-  pair<string, string> lookup(rc->getPubKeyHash(), pdns_md5sum(msg)); 
+  pair<string, string> lookup(rc->getPubKeyHash(), pdns_md5sum(msg));  // this hash is a memory saving exercise
   
   bool doCache=1;
   if(doCache)
   {
-    Lock l(&g_signatures_lock);
-    if(g_signatures.count(lookup)) {
-      // cerr<<"Hit!"<<endl;
-      rrc.d_signature=g_signatures[lookup];
+    ReadLock l(&g_signatures_lock);
+    signaturecache_t::const_iterator iter = g_signatures.find(lookup);
+    if(iter != g_signatures.end()) {
+      rrc.d_signature=iter->second;
       return;
     }
     else
       ; // cerr<<"Miss!"<<endl;
   }
   
-  //DTime dt;
-  //dt.set();
   rrc.d_signature = rc->sign(msg);
-  //cerr<<dt.udiff()<<endl;
 
   if(doCache) {
-    Lock l(&g_signatures_lock);
+    WriteLock l(&g_signatures_lock);
+    /* we add some jitter here so not all your slaves start pruning their caches at the very same millisecond */
+    int weekno = (time(0) - dns_random(3600)) / (86400*7);  // we just spent milliseconds doing a signature, microsecond more won't kill us
+  
+    if(g_cacheweekno < weekno) {  // blunt but effective (C) Habbie
+      g_signatures.clear();
+      g_cacheweekno = weekno;
+    }
     g_signatures[lookup] = rrc.d_signature;
   }
 }
@@ -171,6 +181,7 @@ void addRRSigs(DNSSECKeeper& dk, DNSBackend& db, const set<string, CIStringCompa
   string signQName, wildcardQName;
   uint16_t signQType=0;
   uint32_t signTTL=0;
+  uint32_t origTTL=0;
   
   DNSPacketWriter::Place signPlace=DNSPacketWriter::ANSWER;
   vector<shared_ptr<DNSRecordContent> > toSign;
@@ -181,13 +192,17 @@ void addRRSigs(DNSSECKeeper& dk, DNSBackend& db, const set<string, CIStringCompa
   for(vector<DNSResourceRecord>::const_iterator pos = rrs.begin(); pos != rrs.end(); ++pos) {
     if(pos != rrs.begin() && (signQType != pos->qtype.getCode()  || signQName != pos->qname)) {
       if(getBestAuthFromSet(authSet, signQName, signer))
-        addSignature(dk, db, signer, signQName, wildcardQName, signQType, signTTL, signPlace, toSign, signedRecords);
+        addSignature(dk, db, signer, signQName, wildcardQName, signQType, signTTL, signPlace, toSign, signedRecords, origTTL);
     }
     signedRecords.push_back(*pos);
     signQName= pos->qname;
     wildcardQName = pos->wildcardname;
     signQType = pos ->qtype.getCode();
-    signTTL = pos->ttl;
+    if(pos->signttl)
+      signTTL = pos->signttl;
+    else
+      signTTL = pos->ttl;
+    origTTL = pos->ttl;
     signPlace = (DNSPacketWriter::Place) pos->d_place;
     if(pos->auth || pos->qtype.getCode() == QType::DS) {
       string content = pos->content;
@@ -205,6 +220,6 @@ void addRRSigs(DNSSECKeeper& dk, DNSBackend& db, const set<string, CIStringCompa
     }
   }
   if(getBestAuthFromSet(authSet, signQName, signer))
-    addSignature(dk, db, signer, signQName, wildcardQName, signQType, signTTL, signPlace, toSign, signedRecords);
+    addSignature(dk, db, signer, signQName, wildcardQName, signQType, signTTL, signPlace, toSign, signedRecords, origTTL);
   rrs.swap(signedRecords);
 }

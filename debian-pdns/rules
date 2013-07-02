@@ -2,7 +2,8 @@
 
 tmpdir		:= $(shell pwd)/debian-pdns/tmp
 be_tmpdir	:= $(shell pwd)/debian-pdns/tmp-backend
-backends	:= opendbx ldap pipe gmysql gpgsql gsqlite gsqlite3
+tools_tmpdir:= $(shell pwd)/debian-pdns/tmp-tools
+backends	:= opendbx ldap pipe gmysql gpgsql gsqlite3
 debs		:= opendbx ldap pipe pgsql sqlite sqlite3
 
 binary-doc:
@@ -19,8 +20,6 @@ binary-doc:
 
 	install -d -m 755 -o root -g root \
 		"$(tmpdir)"/usr/share/doc/pdns-doc
-	install -p -m 644 -o root -g root ChangeLog \
-			"$(tmpdir)"/usr/share/doc/pdns-doc/changelog
 	install -p -m 644 -o root -g root debian-pdns/changelog \
 			"$(tmpdir)"/usr/share/doc/pdns-doc/changelog.Debian
 	gzip -9 "$(tmpdir)"/usr/share/doc/pdns-doc/*
@@ -43,7 +42,8 @@ binary-doc:
 
 build-static stamp-build-static:
 		./configure \
-		CC="ccache gcc" CPPFLAGS=-I/usr/local/include/botan-1.10 CXX="ccache g++"\
+		CXX=$(shell pwd)/build-scripts/semistaticg++ \
+		PKG_CONFIG_PATH=/opt/botan-1.10/lib/pkgconfig/ \
 		--prefix=/usr \
 		--libexecdir='$${prefix}/lib' \
 		--libdir='$${prefix}/lib/powerdns' \
@@ -51,11 +51,13 @@ build-static stamp-build-static:
 		--infodir='$${datadir}/info' \
 		--mandir='$${datadir}/man' \
 		--with-pgsql-lib=/opt/postgresql/lib --with-pgsql-includes=/opt/postgresql/include \
-		--with-modules="gmysql gpgsql pipe gsqlite gsqlite3 lua geo" \
+		--with-modules="gmysql gpgsql pipe gsqlite3 lua geo tinydns mydns opendbx remote" \
 		--with-dynmodules="" \
 		--enable-botan1.10 --enable-cryptopp \
-		--enable-static-binaries 
+		--enable-static-binaries \
+		--enable-tools
 	make -j4
+
 	touch stamp-build-static
 
 
@@ -76,13 +78,15 @@ build stamp-build: configure
 binary-main-prepare: 
 	rm -f debian-pdns/substvars
 	rm -rf "$(tmpdir)" "$(tmpdir)"-*
+	rm -rf "$(tools_tmpdir)" "$(tools_tmpdir)"-*
 	install -d -m 755 -o root -g root "$(tmpdir)"
+	install -d -m 755 -o root -g root "$(tools_tmpdir)"
 	make DESTDIR="$(tmpdir)" install
 
 	rm -f "$(tmpdir)"/usr/bin/binpatch
 	rm -f "$(tmpdir)"/usr/bin/zone2ldap
 	rm -rf "$(tmpdir)"/usr/lib
-
+	rm -f "$(tmpdir)"/usr/share/man/man8/zone2ldap.8
 	strip --remove-section=.comment --remove-section=.note \
 		--strip-unneeded \
 		"$(tmpdir)"/usr/bin/zone2sql \
@@ -96,8 +100,6 @@ binary-main-prepare:
 
 	install -d -m 755 -o root -g root \
 		"$(tmpdir)"/usr/share/doc/pdns
-	install -p -m 644 -o root -g root ChangeLog \
-			"$(tmpdir)"/usr/share/doc/pdns/changelog
 	install -p -m 644 -o root -g root debian-pdns/changelog \
 			"$(tmpdir)"/usr/share/doc/pdns/changelog.Debian
 	gzip -9 "$(tmpdir)"/usr/share/doc/pdns/c*
@@ -115,6 +117,36 @@ binary-main-prepare:
 			"$(tmpdir)"/DEBIAN/conffiles
 
 
+	install -d -m 755 -o root -g root \
+		"$(tools_tmpdir)"/usr/bin
+	install -d -m 755 -o root -g root \
+		"$(tools_tmpdir)"/usr/share/man/man8
+	install -d -m 755 -o root -g root \
+		"$(tools_tmpdir)"/usr/share/man/man1
+	install -d -m 755 -o root -g root \
+		"$(tools_tmpdir)"/usr/share/doc/pdns-tools
+	install -p -m 644 -o root -g root debian-pdns/changelog \
+			"$(tools_tmpdir)"/usr/share/doc/pdns-tools/changelog.Debian
+	gzip -9 "$(tools_tmpdir)"/usr/share/doc/pdns-tools/c*
+	install -p -m 644 -o root -g root debian-pdns/copyright \
+			"$(tools_tmpdir)"/usr/share/doc/pdns-tools/
+
+	install -d -m 755 -o root -g root "$(tools_tmpdir)"/DEBIAN
+
+	#FIXME: shell loops hide errors
+	for prog in dnsbulktest dnsreplay dnsscan dnsscope dnstcpbench dnswasher nproxy nsec3dig ; do \
+		mv "$(tmpdir)"/usr/bin/$$prog "$(tools_tmpdir)"/usr/bin ; \
+		[ -e "$(tmpdir)"/usr/share/man/man8/"$$prog".8 ] && \
+			mv "$(tmpdir)"/usr/share/man/man8/"$$prog".8 "$(tools_tmpdir)"/usr/share/man/man8/ ; \
+		[ -e "$(tmpdir)"/usr/share/man/man1/"$$prog".1 ] && \
+			mv "$(tmpdir)"/usr/share/man/man1/"$$prog".1 "$(tools_tmpdir)"/usr/share/man/man1/ ; \
+		strip --remove-section=.comment --remove-section=.note \
+			--strip-unneeded \
+			"$(tools_tmpdir)"/usr/bin/"$$prog" ; \
+	done
+
+
+
 binary-main: stamp-build binary-main-prepare
 	dpkg-shlibdeps -Tdebian-pdns/substvars "$(tmpdir)"/usr/bin/zone2sql \
 		"$(tmpdir)"/usr/sbin/pdns_server \
@@ -125,8 +157,9 @@ binary-main: stamp-build binary-main-prepare
 
 binary-static: stamp-build-static binary-main-prepare
 	dpkg-gencontrol -fdebian-pdns/files -cdebian-pdns/control -ldebian-pdns/changelog  -isp -ppdns-static -P"$(tmpdir)"
+	dpkg-gencontrol -fdebian-pdns/files -cdebian-pdns/control -ldebian-pdns/changelog  -isp -ppdns-tools -P"$(tools_tmpdir)"
 	dpkg --build "$(tmpdir)" ..
-
+	dpkg --build "$(tools_tmpdir)" ..
 
 binary-backend: stamp-build
 	rm -rf "$(tmpdir)"

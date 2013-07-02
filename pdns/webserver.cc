@@ -1,6 +1,6 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2002-2010  PowerDNS.COM BV
+    Copyright (C) 2002-2012  PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
@@ -62,9 +62,11 @@ void *WebServer::serveConnection(void *p)
     vector<string> parts;
     stringtok(parts,line);
     
-    string uri;
-    if(parts.size()>1)
+    string method, uri;
+    if(parts.size()>1) {
+      method=parts[0];
       uri=parts[1];
+    }
 
     vector<string>variables;
 
@@ -102,7 +104,7 @@ void *WebServer::serveConnection(void *p)
     }
 
     bool authOK=0;
-
+    int postlen = 0;
     // read & ignore other lines
     do {
       client->getLine(line);
@@ -121,15 +123,27 @@ void *WebServer::serveConnection(void *p)
           authOK=1;
         }
       }
+      else if(boost::starts_with(line, "Content-Length: ") && method=="POST") {
+	postlen = atoi(line.c_str() + strlen("Content-Length: "));
+//	cout<<"Got a post: "<<postlen<<" bytes"<<endl;
+      }
+      else
+	; // cerr<<"Ignoring line: "<<line<<endl;
+      
     }while(!line.empty());
 
+    string post;
+    if(postlen) 
+      post = client->get(postlen);
+  
+ //   cout<<"Post: '"<<post<<"'"<<endl;
 
     if(!d_password.empty() && !authOK) {
       client->putLine("HTTP/1.1 401 OK\n");
       client->putLine("WWW-Authenticate: Basic realm=\"PowerDNS\"\n");
       
       client->putLine("Connection: close\n");
-      client->putLine("Content-type: text/html\n\n");
+      client->putLine("Content-type: text/html; charset=UTF-8\n\n");
       client->putLine("Please enter a valid password!\n");
       client->close();
       delete client;
@@ -139,19 +153,19 @@ void *WebServer::serveConnection(void *p)
     HandlerFunction *fptr;
     if(d_functions.count(baseUrl) && (fptr=d_functions[baseUrl])) {
       bool custom=false;
-      string ret=(*fptr)(varmap, d_that, &custom);
+      string ret=(*fptr)(method, post, varmap, d_that, &custom);
 
       if(!custom) {
         client->putLine("HTTP/1.1 200 OK\n");
         client->putLine("Connection: close\n");
-        client->putLine("Content-type: text/html\n\n");
+        client->putLine("Content-type: text/html; charset=UTF-8\n\n");
       }
       client->putLine(ret);
     }
     else {
       client->putLine("HTTP/1.1 404 Not found\n");
       client->putLine("Connection: close\n");
-      client->putLine("Content-type: text/html\n\n");
+      client->putLine("Content-type: text/html; charset=UTF-8\n\n");
       // FIXME: CSS problem?
       client->putLine("<html><body><h1>Did not find file '"+baseUrl+"'</body></html>\n");
     }
@@ -163,7 +177,7 @@ void *WebServer::serveConnection(void *p)
 
   }
   catch(SessionTimeoutException &e) {
-    L<<Logger::Error<<"Timeout in webserver"<<endl;
+    // L<<Logger::Error<<"Timeout in webserver"<<endl;
   }
   catch(SessionException &e) {
     L<<Logger::Error<<"Fatal error in webserver: "<<e.reason<<endl;
@@ -207,14 +221,14 @@ void WebServer::go()
     Session *client;
     pthread_t tid;
     
-    L<<Logger::Error<<"Launched webserver on "<<d_listenaddress<<":"<<d_port<<endl;
+    L<<Logger::Error<<"Launched webserver on " << d_server->d_local.toStringWithPort() <<endl;
 
     while((client=d_server->accept())) {
       pthread_create(&tid, 0 , &serveConnection, (void *)client);
     }
   }
   catch(SessionTimeoutException &e) {
-    L<<Logger::Error<<"Timeout in webserver"<<endl;
+    //    L<<Logger::Error<<"Timeout in webserver"<<endl;
   }
   catch(SessionException &e) {
     L<<Logger::Error<<"Fatal error in webserver: "<<e.reason<<endl;

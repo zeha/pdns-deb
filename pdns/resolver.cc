@@ -45,24 +45,9 @@
 
 #include "namespaces.hh"
 
-int sendNotification(int sock, const string& domain, const ComboAddress& remote, uint16_t id)
-{
-  vector<uint8_t> packet;
-  DNSPacketWriter pw(packet, domain, QType::SOA, 1, Opcode::Notify);
-  pw.getHeader()->id = id;
-  pw.getHeader()->aa = true; 
-
-  if(sendto(sock, &packet[0], packet.size(), 0, (struct sockaddr*)(&remote), remote.getSocklen())<0) {
-    throw ResolverException("Unable to send notify to "+remote.toStringWithPort()+": "+stringerror());
-  }
-  return true;
-}
-
 int makeQuerySocket(const ComboAddress& local, bool udpOrTCP)
 {
   ComboAddress ourLocal(local);
-  static uint16_t port_counter=5000;
-  port_counter++; // this makes us use a new port for each query, fixes ticket #2
   
   int sock=socket(ourLocal.sin4.sin_family, udpOrTCP ? SOCK_DGRAM : SOCK_STREAM, 0);
   Utility::setCloseOnExec(sock);
@@ -70,7 +55,8 @@ int makeQuerySocket(const ComboAddress& local, bool udpOrTCP)
     unixDie("Creating local resolver socket for "+ourLocal.toString() + ((local.sin4.sin_family == AF_INET6) ? ", does your OS miss IPv6?" : ""));
   }
 
-  if(!udpOrTCP) {
+  if(udpOrTCP) {
+    // udp, try hard to bind an unpredictable port
     int tries=10;
     while(--tries) {
       ourLocal.sin4.sin_port = htons(10000+(dns_random(10000)));
@@ -78,12 +64,16 @@ int makeQuerySocket(const ComboAddress& local, bool udpOrTCP)
       if (::bind(sock, (struct sockaddr *)&ourLocal, ourLocal.getSocklen()) >= 0) 
         break;
     }
+    // cerr<<"bound udp port "<<ourLocal.sin4.sin_port<<", "<<tries<<" tries left"<<endl;
+
     if(!tries) {
       Utility::closesocket(sock);
       throw AhuException("Resolver binding to local UDP socket on "+ourLocal.toString()+": "+stringerror());
     }
   }
   else {
+    // tcp, let the kernel figure out the port
+    // cerr<<"letting kernel pick TCP port"<<endl;
     ourLocal.sin4.sin_port = 0;
     if(::bind(sock, (struct sockaddr *)&ourLocal, ourLocal.getSocklen()) < 0)
       throw AhuException("Resolver binding to local TCP socket on "+ourLocal.toString()+": "+stringerror());
@@ -132,7 +122,8 @@ uint16_t Resolver::sendResolve(const ComboAddress& remote, const char *domain, i
   if(!tsigkeyname.empty()) {
     // cerr<<"Adding TSIG to notification, key name: '"<<tsigkeyname<<"', algo: '"<<tsigalgorithm<<"', secret: "<<Base64Encode(tsigsecret)<<endl;
     TSIGRecordContent trc;
-    trc.d_algoName = tsigalgorithm + ".sig-alg.reg.int.";
+    if (tsigalgorithm == "hmac-md5")  
+      trc.d_algoName = tsigalgorithm + ".sig-alg.reg.int.";
     trc.d_time = time(0);
     trc.d_fudge = 300;
     trc.d_origID=ntohs(d_randomid);
@@ -192,8 +183,11 @@ static int parseResult(MOADNSParser& mdp, const std::string& origQname, uint16_t
       rr.priority = atoi(rr.content.c_str());
       vector<pair<string::size_type, string::size_type> > fields;
       vstringtok(fields, rr.content, " ");
-      if(fields.size()==4)
+      if(fields.size()==4) {
+	if(fields[3].second - fields[3].first > 1) // strip dot, unless root
+	  fields[3].second--;
         rr.content=string(rr.content.c_str() + fields[1].first, fields[3].second - fields[1].first);
+      }
     }
     result->push_back(rr);
   }
@@ -306,17 +300,25 @@ void Resolver::getSoaSerial(const string &ipport, const string &domain, uint32_t
   *serial=(uint32_t)atol(parts[2].c_str());
 }
 
-AXFRRetriever::AXFRRetriever(const ComboAddress& remote, const string& domain, const string& tsigkeyname, const string& tsigalgorithm, 
-  const string& tsigsecret)
+AXFRRetriever::AXFRRetriever(const ComboAddress& remote,
+	const string& domain,
+	const string& tsigkeyname,
+	const string& tsigalgorithm, 
+	const string& tsigsecret,
+	const ComboAddress* laddr)
 : d_tsigkeyname(tsigkeyname), d_tsigsecret(tsigsecret), d_tsigPos(0), d_nonSignedMessages(0)
 {
   ComboAddress local;
-  if(remote.sin4.sin_family == AF_INET)
-    local=ComboAddress(::arg()["query-local-address"]);
-  else if(!::arg()["query-local-address6"].empty())
-    local=ComboAddress(::arg()["query-local-address6"]);
-  else
-    local=ComboAddress("::");
+  if (laddr != NULL) {
+	  local = (ComboAddress) (*laddr);
+  } else {
+	  if(remote.sin4.sin_family == AF_INET)
+	    local=ComboAddress(::arg()["query-local-address"]);
+	  else if(!::arg()["query-local-address6"].empty())
+	    local=ComboAddress(::arg()["query-local-address6"]);
+	  else
+	    local=ComboAddress("::");
+  }
   d_sock = -1;
   try {
     d_sock = makeQuerySocket(local, false); // make a TCP socket

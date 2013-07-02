@@ -25,6 +25,7 @@
 #include "dnsbackend.hh"
 #include "ueberbackend.hh"
 #include "packethandler.hh"
+#include "nameserver.hh"
 #include "resolver.hh"
 #include "logger.hh"
 #include "dns.hh"
@@ -129,10 +130,9 @@ time_t CommunicatorClass::doNotifications()
   ComboAddress from;
   Utility::socklen_t fromlen=sizeof(from);
   char buffer[1500];
-  int size;
-  // receive incoming notifications on the nonblocking socket and take them off the list
-  int sock;
+  int size, sock;
 
+  // receive incoming notifications on the nonblocking socket and take them off the list
   while(waitFor2Data(d_nsock4, d_nsock6, 0, 0, &sock) > 0) {
     size=recvfrom(sock,buffer,sizeof(buffer),0,(struct sockaddr *)&from,&fromlen);
     if(size < 0)
@@ -166,6 +166,12 @@ time_t CommunicatorClass::doNotifications()
     if(!purged) {
       try {
         ComboAddress remote(ip, 53); // default to 53
+        if((d_nsock6 < 0 && remote.sin4.sin_family == AF_INET6) ||
+           (d_nsock4 < 0 && remote.sin4.sin_family == AF_INET))
+             continue; // don't try to notify what we can't!
+	if(d_preventSelfNotification && AddressIsUs(remote))
+	  continue;
+
         sendNotification(remote.sin4.sin_family == AF_INET ? d_nsock4 : d_nsock6, domain, remote, id); 
         drillHole(domain, ip);
       }
@@ -178,6 +184,18 @@ time_t CommunicatorClass::doNotifications()
   }
 
   return d_nq.earliest();
+}
+
+void CommunicatorClass::sendNotification(int sock, const string& domain, const ComboAddress& remote, uint16_t id)
+{
+  vector<uint8_t> packet;
+  DNSPacketWriter pw(packet, domain, QType::SOA, 1, Opcode::Notify);
+  pw.getHeader()->id = id;
+  pw.getHeader()->aa = true; 
+
+  if(sendto(sock, &packet[0], packet.size(), 0, (struct sockaddr*)(&remote), remote.getSocklen()) < 0) {
+    throw ResolverException("Unable to send notify to "+remote.toStringWithPort()+": "+stringerror());
+  }
 }
 
 void CommunicatorClass::drillHole(const string &domain, const string &ip)
@@ -211,7 +229,6 @@ void CommunicatorClass::makeNotifySockets()
 void CommunicatorClass::notify(const string &domain, const string &ip)
 {
   d_nq.add(domain, ip);
-
   d_any_sem.post();
 }
 

@@ -32,7 +32,9 @@ public:
   bool startTransaction(const string &domain, int domain_id=-1);
   bool commitTransaction();
   bool abortTransaction();
-  bool feedRecord(const DNSResourceRecord &r);
+  bool feedRecord(const DNSResourceRecord &r, string *ordername=0);
+  bool feedEnts(int domain_id, set<string>& nonterm);
+  bool feedEnts3(int domain_id, const string &domain, set<string> &nonterm, unsigned int times, const string &salt, bool narrow);
   bool createSlaveDomain(const string &ip, const string &domain, const string &account);
   bool superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *account, DNSBackend **db);
   void setFresh(uint32_t domain_id);
@@ -43,10 +45,15 @@ public:
   virtual bool getBeforeAndAfterNamesAbsolute(uint32_t id, const std::string& qname, std::string& unhashed, std::string& before, std::string& after);
   bool updateDNSSECOrderAndAuth(uint32_t domain_id, const std::string& zonename, const std::string& qname, bool auth);
   virtual bool updateDNSSECOrderAndAuthAbsolute(uint32_t domain_id, const std::string& qname, const std::string& ordername, bool auth);
+  virtual bool nullifyDNSSECOrderNameAndUpdateAuth(uint32_t domain_id, const std::string& qname, bool auth);
   virtual bool nullifyDNSSECOrderNameAndAuth(uint32_t domain_id, const std::string& qname, const std::string& type);
+  virtual bool setDNSSECAuthOnDsRecord(uint32_t domain_id, const std::string& qname);
+  virtual bool updateEmptyNonTerminals(uint32_t domain_id, const std::string& zonename, set<string>& insert ,set<string>& erase, bool remove);
+  virtual bool doesDNSSEC();
 
   virtual bool calculateSOASerial(const string& domain, const SOAData& sd, time_t& serial);
 
+  bool replaceRRSet(uint32_t domain_id, const string& qname, const QType& qt, const vector<DNSResourceRecord>& rrset);
   int addDomainKey(const string& name, const KeyData& key);
   bool getDomainKeys(const string& name, unsigned int kind, std::vector<KeyData>& keys);
   bool getDomainMetadata(const string& name, const std::string& kind, std::vector<std::string>& meta);
@@ -81,10 +88,14 @@ private:
   string d_SuperMasterInfoQuery;
   string d_InsertSlaveZoneQuery;
   string d_InsertRecordQuery;
+  string d_InsertEntQuery;
+  string d_InsertRecordOrderQuery;
+  string d_InsertEntOrderQuery;
   string d_UpdateSerialOfZoneQuery;
   string d_UpdateLastCheckofZoneQuery;
   string d_InfoOfAllMasterDomainsQuery;
   string d_DeleteZoneQuery;		
+  string d_DeleteRRSet;
   string d_ZoneLastChangeQuery;
   
   string d_firstOrderQuery;
@@ -92,7 +103,12 @@ private:
   string d_afterOrderQuery;
   string d_lastOrderQuery;
   string d_setOrderAuthQuery;
+  string d_nullifyOrderNameAndUpdateAuthQuery;
   string d_nullifyOrderNameAndAuthQuery;
+  string d_setAuthOnDsRecordQuery;
+  string d_removeEmptyNonTerminalsFromZoneQuery;
+  string d_insertEmptyNonTerminalQuery;
+  string d_deleteEmptyNonTerminalQuery;
 
   string d_AddDomainKeyQuery;
   string d_ListDomainKeysQuery;

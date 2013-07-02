@@ -3,7 +3,7 @@ Section: net
 Priority: extra
 Standards-Version: 3.5.8
 Maintainer: bert hubert <bert.hubert@netherlabs.nl>
-Build-Depends: autoconf, libtool, flex, bison, docbook-utils, libmysqlclient-dev, postgresql-dev, tdb-dev, libgdbm-dev, libldap2-dev, libsqlite0-dev, dpkg-dev (> 1.10.17)
+Build-Depends: autoconf, libtool, flex, bison, docbook-utils, libmysqlclient-dev, postgresql-dev | libpq-dev, tdb-dev, libgdbm-dev, libldap2-dev, libsqlite3-dev, dpkg-dev (>= 1.10.17), libboost-dev (>=1.34), libboost-program-options-dev, libboost-serialization-dev, pkg-config, ragel, libbotan1.10-dev, liblua5.1-dev
 
 Package: pdns
 Architecture: any
@@ -18,6 +18,7 @@ Description: extremely powerful and versatile nameserver
 Package: pdns-static
 Architecture: any
 Recommends: pdns-doc
+Conflicts: pdns-server
 Description: static version of pDNS
  PowerDNS is a versatile nameserver which supports a large number
  of different backends ranging from simple zonefiles to relational
@@ -26,6 +27,18 @@ Description: static version of pDNS
  This package contains a statically compiled version of pDNS which
  can be used on older Debian releases for which no dynamic version
  is available.
+
+Package: pdns-tools
+Architecture: any
+Recommends: pdns-doc
+Conflicts: pdns-server
+Description: static version of pDNS tools
+ PowerDNS is a versatile nameserver which supports a large number
+ of different backends ranging from simple zonefiles to relational
+ databases and load balancing/failover algorithms.
+ .
+ This package contains a collection of tools based on the core
+ PowerDNS libraries.
 
 Package: pdns-doc
 Section: doc

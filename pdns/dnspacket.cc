@@ -89,9 +89,10 @@ DNSPacket::DNSPacket(const DNSPacket &orig)
   d_maxreplylen = orig.d_maxreplylen;
   d_ednsping = orig.d_ednsping;
   d_wantsnsid = orig.d_wantsnsid;
-  
+  d_anyLocal = orig.d_anyLocal;  
   d_eso = orig.d_eso;
   d_haveednssubnet = orig.d_haveednssubnet;
+  d_haveednssection = orig.d_haveednssection;
   
   d_dnssecOk = orig.d_dnssecOk;
   d_rrs=orig.d_rrs;
@@ -157,6 +158,8 @@ void DNSPacket::clearRecords()
 
 void DNSPacket::addRecord(const DNSResourceRecord &rr)
 {
+  // this removes duplicates from the packet in case we are not compressing
+  // for AXFR, no such checking is performed!
   if(d_compress)
     for(vector<DNSResourceRecord>::const_iterator i=d_rrs.begin();i!=d_rrs.end();++i) 
       if(rr.qname==i->qname && rr.qtype==i->qtype && rr.content==i->content) {
@@ -265,12 +268,14 @@ void DNSPacket::wrapup()
   DNSPacketWriter pw(packet, qdomain, qtype.getCode(), qclass);
 
   pw.getHeader()->rcode=d.rcode;
+  pw.getHeader()->opcode = d.opcode;
   pw.getHeader()->aa=d.aa;
   pw.getHeader()->ra=d.ra;
   pw.getHeader()->qr=d.qr;
   pw.getHeader()->id=d.id;
   pw.getHeader()->rd=d.rd;
-
+  pw.getHeader()->tc=d.tc;
+  
   DNSPacketWriter::optvect_t opts;
   if(d_wantsnsid) {
     opts.push_back(make_pair(3, ::arg()["server-id"]));
@@ -281,7 +286,7 @@ void DNSPacket::wrapup()
   }
   
   
-  if(!d_rrs.empty() || !opts.empty() || d_haveednssubnet) {
+  if(!d_rrs.empty() || !opts.empty() || d_haveednssubnet || d_haveednssection) {
     try {
       uint8_t maxScopeMask=0;
       for(pos=d_rrs.begin(); pos < d_rrs.end(); ++pos) {
@@ -302,12 +307,18 @@ void DNSPacket::wrapup()
               drc->toPacket(pw);
         if(pw.size() + 20U > (d_tcp ? 65535 : getMaxReplyLen())) { // 20 = room for EDNS0
           pw.rollback();
-          if(pos->d_place == DNSResourceRecord::ANSWER) {
+          if(pos->d_place == DNSResourceRecord::ANSWER || pos->d_place == DNSResourceRecord::AUTHORITY) {
             pw.getHeader()->tc=1;
           }
           goto noCommit;
         }
       }
+
+      // if(!pw.getHeader()->tc) // protect against double commit from addSignature
+
+      if(!d_rrs.empty()) pw.commit();
+
+      noCommit:;
       
       if(d_haveednssubnet) {
         string makeEDNSSubnetOptsString(const EDNSSubnetOpts& eso);
@@ -318,12 +329,11 @@ void DNSPacket::wrapup()
         opts.push_back(make_pair(::arg().asNum("edns-subnet-option-number"), opt));
       }
 
-      if(!opts.empty() || d_dnssecOk)
+      if(!opts.empty() || d_haveednssection || d_dnssecOk)
+      {
         pw.addOpt(2800, 0, d_dnssecOk ? EDNSOpts::DNSSECOK : 0, opts);
-
-      if(!pw.getHeader()->tc) // protect against double commit from addSignature
         pw.commit();
-      noCommit:;
+      }
     }
     catch(std::exception& e) {
       L<<Logger::Warning<<"Exception: "<<e.what()<<endl;
@@ -355,7 +365,7 @@ DNSPacket *DNSPacket::replyPacket() const
 {
   DNSPacket *r=new DNSPacket;
   r->setSocket(d_socket);
-
+  r->d_anyLocal=d_anyLocal;
   r->setRemote(&d_remote);
   r->setAnswer(true);  // this implies the allocation of the header
   r->setA(true); // and we are authoritative
@@ -376,6 +386,7 @@ DNSPacket *DNSPacket::replyPacket() const
   r->d_dnssecOk = d_dnssecOk;
   r->d_eso = d_eso;
   r->d_haveednssubnet = d_haveednssubnet;
+  r->d_haveednssection = d_haveednssection;
   
   if(!d_tsigkeyname.empty()) {
     r->d_tsigkeyname = d_tsigkeyname;
@@ -388,18 +399,20 @@ DNSPacket *DNSPacket::replyPacket() const
   return r;
 }
 
-void DNSPacket::spoofQuestion(const string &qd)
+void DNSPacket::spoofQuestion(const DNSPacket *qd)
 {
-  string label=simpleCompress(qd);
   d_wrapped=true; // if we do this, don't later on wrapup
   
-  if(label.size() + sizeof(d) > d_rawpacket.size()) { // probably superfluous
-    return; 
+  int labellen;
+  string::size_type i=sizeof(d);
+
+  for(;;) {
+    labellen = qd->d_rawpacket[i];
+    if(!labellen) break;
+    i++;
+    d_rawpacket.replace(i, labellen, qd->d_rawpacket, i, labellen);
+    i = i + labellen;
   }
-    
-  for(string::size_type i=0; i < label.size(); ++i)
-    d_rawpacket[i+sizeof(d)]=label[i];
-  
 }
 
 int DNSPacket::noparse(const char *mesg, int length)
@@ -477,9 +490,11 @@ try
   d_ednsping.clear();
   d_havetsig = mdp.getTSIGPos();
   d_haveednssubnet = false;
+  d_haveednssection = false;
 
 
   if(getEDNSOpts(mdp, &edo)) {
+    d_haveednssection=true;
     d_maxreplylen=std::min(edo.d_packetsize, (uint16_t)1680);
 //    cerr<<edo.d_Z<<endl;
     if(edo.d_Z & EDNSOpts::DNSSECOK)
@@ -550,6 +565,11 @@ bool DNSPacket::hasEDNSSubnet()
   return d_haveednssubnet;
 }
 
+bool DNSPacket::hasEDNS() 
+{
+  return d_haveednssection;
+}
+
 Netmask DNSPacket::getRealRemote() const
 {
   if(d_haveednssubnet)
@@ -584,7 +604,15 @@ bool checkForCorrectTSIG(const DNSPacket* q, DNSBackend* B, string* keyname, str
     L<<Logger::Error<<"Packet for domain '"<<q->qdomain<<"' denied: can't find TSIG key with name '"<<*keyname<<"' and algorithm '"<<trc->d_algoName<<"'"<<endl;
     return false;
   }
-  trc->d_algoName += ".sig-alg.reg.int.";
+
+  if (trc->d_algoName == "hmac-md5") 
+    trc->d_algoName += ".sig-alg.reg.int."; 
+
+  if (trc->d_algoName != "hmac-md5.sig-alg.reg.int.") {
+    L<<Logger::Error<<"Unsupported TSIG HMAC algorithm " << trc->d_algoName << endl;
+    return false;
+  }
+
   B64Decode(secret64, *secret);
   bool result=calculateMD5HMAC(*secret, message) == trc->d_mac;
   if(!result) {

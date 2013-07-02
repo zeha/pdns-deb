@@ -571,6 +571,7 @@ char *yytext;
 #include <string.h>
 #include <errno.h>
 
+#define YY_NO_INPUT 1
 #define YYSTYPE char *
 
 #ifdef WIN32
@@ -603,7 +604,8 @@ extern const char *bind_directory;
  
 
 
-#line 607 "bindlexer.c"
+#define YY_NO_INPUT 1
+#line 609 "bindlexer.c"
 
 #define INITIAL 0
 #define comment 1
@@ -665,8 +667,6 @@ extern int yywrap (void );
 #endif
 #endif
 
-    static void yyunput (int c,char *buf_ptr  );
-    
 #ifndef yytext_ptr
 static void yy_flex_strncpy (char *,yyconst char *,int );
 #endif
@@ -692,8 +692,6 @@ static int input (void );
     static void yy_push_state (int new_state );
     
     static void yy_pop_state (void );
-    
-    static int yy_top_state (void );
     
 /* Amount of stuff to slurp up with each read. */
 #ifndef YY_READ_BUF_SIZE
@@ -803,11 +801,11 @@ YY_DECL
 	register char *yy_cp, *yy_bp;
 	register int yy_act;
     
-#line 42 "bindlexer.l"
+#line 47 "bindlexer.l"
 
 
 
-#line 811 "bindlexer.c"
+#line 809 "bindlexer.c"
 
 	if ( !(yy_init) )
 		{
@@ -892,43 +890,43 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 45 "bindlexer.l"
+#line 50 "bindlexer.l"
 BEGIN(comment);
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 46 "bindlexer.l"
+#line 51 "bindlexer.l"
 /* eat anything that's not a '*' */
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 47 "bindlexer.l"
+#line 52 "bindlexer.l"
 /* eat up '*'s not followed by '/'s */
 	YY_BREAK
 case 4:
 /* rule 4 can match eol */
 YY_RULE_SETUP
-#line 48 "bindlexer.l"
+#line 53 "bindlexer.l"
 ++linenumber;
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 49 "bindlexer.l"
+#line 54 "bindlexer.l"
 BEGIN(INITIAL);
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 51 "bindlexer.l"
+#line 56 "bindlexer.l"
 BEGIN(incl);
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 52 "bindlexer.l"
+#line 57 "bindlexer.l"
 /* eat the whitespace */
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 53 "bindlexer.l"
+#line 58 "bindlexer.l"
 { /* got the include file name */
 	char filename[1024];
         if ( include_stack_ptr >= MAX_INCLUDE_DEPTH )
@@ -965,7 +963,7 @@ case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(comment):
 case YY_STATE_EOF(incl):
 case YY_STATE_EOF(quoted):
-#line 86 "bindlexer.l"
+#line 91 "bindlexer.l"
 {
         if ( --include_stack_ptr < 0 )
         {
@@ -988,94 +986,94 @@ case YY_STATE_EOF(quoted):
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 109 "bindlexer.l"
+#line 114 "bindlexer.l"
 return ZONETOK; 
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 111 "bindlexer.l"
+#line 116 "bindlexer.l"
 return FILETOK;
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 112 "bindlexer.l"
+#line 117 "bindlexer.l"
 return OPTIONSTOK;
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 113 "bindlexer.l"
+#line 118 "bindlexer.l"
 return ALSONOTIFYTOK;
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 114 "bindlexer.l"
+#line 119 "bindlexer.l"
 return ACLTOK;
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 115 "bindlexer.l"
+#line 120 "bindlexer.l"
 return LOGGINGTOK;
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 116 "bindlexer.l"
+#line 121 "bindlexer.l"
 return DIRECTORYTOK;
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 117 "bindlexer.l"
+#line 122 "bindlexer.l"
 return MASTERTOK;
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 118 "bindlexer.l"
+#line 123 "bindlexer.l"
 return TYPETOK;
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 119 "bindlexer.l"
+#line 124 "bindlexer.l"
 yy_push_state(quoted);
 	YY_BREAK
 case 19:
 /* rule 19 can match eol */
 YY_RULE_SETUP
-#line 120 "bindlexer.l"
+#line 125 "bindlexer.l"
 yylval=strdup(yytext); return QUOTEDWORD;
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 121 "bindlexer.l"
+#line 126 "bindlexer.l"
 yy_pop_state();
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 122 "bindlexer.l"
+#line 127 "bindlexer.l"
 yylval=strdup(yytext);return AWORD;
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 123 "bindlexer.l"
+#line 128 "bindlexer.l"
 return OBRACE;
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 124 "bindlexer.l"
+#line 129 "bindlexer.l"
 return EBRACE;
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 125 "bindlexer.l"
+#line 130 "bindlexer.l"
 return SEMICOLON;
 	YY_BREAK
 case 25:
 /* rule 25 can match eol */
 YY_RULE_SETUP
-#line 126 "bindlexer.l"
+#line 131 "bindlexer.l"
 linenumber++;
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 127 "bindlexer.l"
+#line 132 "bindlexer.l"
 ;
 	YY_BREAK
 case 27:
@@ -1083,7 +1081,7 @@ case 27:
 (yy_c_buf_p) = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 128 "bindlexer.l"
+#line 133 "bindlexer.l"
 ;
 	YY_BREAK
 case 28:
@@ -1091,22 +1089,22 @@ case 28:
 (yy_c_buf_p) = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 129 "bindlexer.l"
+#line 134 "bindlexer.l"
 ;
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 130 "bindlexer.l"
+#line 135 "bindlexer.l"
 { 
                         fprintf(stderr,"Parsing '%s': unable to parse line %d at character '%s'\n",current_filename, linenumber, yytext);
                         exit(1); }
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 133 "bindlexer.l"
+#line 138 "bindlexer.l"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 1110 "bindlexer.c"
+#line 1108 "bindlexer.c"
 
 	case YY_END_OF_BUFFER:
 		{
@@ -1431,43 +1429,6 @@ static int yy_get_next_buffer (void)
 	yy_is_jam = (yy_current_state == 108);
 
 	return yy_is_jam ? 0 : yy_current_state;
-}
-
-    static void yyunput (int c, register char * yy_bp )
-{
-	register char *yy_cp;
-    
-    yy_cp = (yy_c_buf_p);
-
-	/* undo effects of setting up yytext */
-	*yy_cp = (yy_hold_char);
-
-	if ( yy_cp < YY_CURRENT_BUFFER_LVALUE->yy_ch_buf + 2 )
-		{ /* need to shift things up to make room */
-		/* +2 for EOB chars. */
-		register int number_to_move = (yy_n_chars) + 2;
-		register char *dest = &YY_CURRENT_BUFFER_LVALUE->yy_ch_buf[
-					YY_CURRENT_BUFFER_LVALUE->yy_buf_size + 2];
-		register char *source =
-				&YY_CURRENT_BUFFER_LVALUE->yy_ch_buf[number_to_move];
-
-		while ( source > YY_CURRENT_BUFFER_LVALUE->yy_ch_buf )
-			*--dest = *--source;
-
-		yy_cp += (int) (dest - source);
-		yy_bp += (int) (dest - source);
-		YY_CURRENT_BUFFER_LVALUE->yy_n_chars =
-			(yy_n_chars) = YY_CURRENT_BUFFER_LVALUE->yy_buf_size;
-
-		if ( yy_cp < YY_CURRENT_BUFFER_LVALUE->yy_ch_buf + 2 )
-			YY_FATAL_ERROR( "flex scanner push-back overflow" );
-		}
-
-	*--yy_cp = (char) c;
-
-	(yytext_ptr) = yy_bp;
-	(yy_hold_char) = *yy_cp;
-	(yy_c_buf_p) = yy_cp;
 }
 
 #ifndef YY_NO_INPUT
@@ -1929,11 +1890,6 @@ YY_BUFFER_STATE yy_scan_bytes  (yyconst char * yybytes, int  _yybytes_len )
 	BEGIN((yy_start_stack)[(yy_start_stack_ptr)]);
 }
 
-    static int yy_top_state  (void)
-{
-    	return (yy_start_stack)[(yy_start_stack_ptr) - 1];
-}
-
 #ifndef YY_EXIT_FAILURE
 #define YY_EXIT_FAILURE 2
 #endif
@@ -2147,7 +2103,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 133 "bindlexer.l"
+#line 138 "bindlexer.l"
 
 
 

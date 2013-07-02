@@ -20,6 +20,7 @@
 #include "dnswriter.hh"
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/format.hpp>
 
 #include "namespaces.hh"
 
@@ -59,7 +60,7 @@ public:
     const string& relevant=(parts.size() > 2) ? parts[2] : "";
     unsigned int total=atoi(parts[1].c_str());
     if(relevant.size()!=2*total)
-      throw runtime_error("invalid unknown record");
+      throw MOADNSException((boost::format("invalid unknown record length for label %s: size not equal to length field (%d != %d)") % d_dr.d_label.c_str() % relevant.size() % (2*total)).str());
     string out;
     out.reserve(total+1);
     for(unsigned int n=0; n < total; ++n) {
@@ -376,7 +377,6 @@ uint8_t PacketReader::get8BitInt()
   return d_content.at(d_pos++);
 }
 
-
 string PacketReader::getLabel(unsigned int recurs)
 {
   string ret;
@@ -388,10 +388,12 @@ string PacketReader::getLabel(unsigned int recurs)
 static string txtEscape(const string &name)
 {
   string ret;
+  char ebuf[5];
 
-  for(string::const_iterator i=name.begin();i!=name.end();++i)
-    if(*i=='\n') {  // XXX FIXME this should do a way better job!
-      ret += "\\010";
+  for(string::const_iterator i=name.begin();i!=name.end();++i) {
+    if((unsigned char) *i > 127 || (unsigned char) *i < 32) {
+      snprintf(ebuf, sizeof(ebuf), "\\%03u", (unsigned char)*i);
+      ret += ebuf;
     }
     else if(*i=='"' || *i=='\\'){
       ret += '\\';
@@ -399,6 +401,7 @@ static string txtEscape(const string &name)
     }
     else
       ret += *i;
+  }
   return ret;
 }
 
@@ -430,7 +433,7 @@ string PacketReader::getText(bool multi)
 
 void PacketReader::getLabelFromContent(const vector<uint8_t>& content, uint16_t& frompos, string& ret, int recurs) 
 {
-  if(recurs > 10)
+  if(recurs > 1000) // the forward reference-check below should make this test 100% obsolete
     throw MOADNSException("Loop");
 
   for(;;) {
@@ -444,6 +447,9 @@ void PacketReader::getLabelFromContent(const vector<uint8_t>& content, uint16_t&
     if((labellen & 0xc0) == 0xc0) {
       uint16_t offset=256*(labellen & ~0xc0) + (unsigned int)content.at(frompos++) - sizeof(dnsheader);
       //        cout<<"This is an offset, need to go to: "<<offset<<endl;
+
+      if(offset >= frompos-2)
+        throw MOADNSException("forward reference during label decompression");
       return getLabelFromContent(content, offset, ret, ++recurs);
     }
     else {
@@ -492,8 +498,13 @@ void PacketReader::xfrHexBlob(string& blob, bool keepReading)
   xfrBlob(blob);
 }
 
-string simpleCompress(const string& label, const string& root)
+string simpleCompress(const string& elabel, const string& root)
 {
+  string label=elabel;
+  // FIXME: this relies on the semi-canonical escaped output from getLabelFromContent
+  boost::replace_all(label, "\\.", ".");
+  boost::replace_all(label, "\\032", " ");
+  boost::replace_all(label, "\\\\", "\\"); 
   typedef vector<pair<unsigned int, unsigned int> > parts_t;
   parts_t parts;
   vstringtok(parts, label, ".");
@@ -501,8 +512,8 @@ string simpleCompress(const string& label, const string& root)
   ret.reserve(label.size()+4);
   for(parts_t::const_iterator i=parts.begin(); i!=parts.end(); ++i) {
     if(!root.empty() && !strncasecmp(root.c_str(), label.c_str() + i->first, 1 + label.length() - i->first)) { // also match trailing 0, hence '1 +'
-      const char rootptr[2]={0xc0,0x11};
-      ret.append(rootptr, 2);
+      const unsigned char rootptr[2]={0xc0,0x11};
+      ret.append((const char *) rootptr, 2);
       return ret;
     }
     ret.append(1, (char)(i->second - i->first));

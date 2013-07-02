@@ -1,6 +1,6 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2002-2009  PowerDNS.COM BV
+    Copyright (C) 2002-2012  PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
@@ -20,6 +20,7 @@
 #include <inttypes.h>
 #include <cstring>
 #include <cstdio>
+#include <regex.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/ordered_index.hpp>
@@ -125,6 +126,7 @@ stringtok (Container &container, string const &in,
   }
 }
 
+// fills container with ranges, so {posbegin,posend}
 template <typename Container>
 void
 vstringtok (Container &container, string const &in,
@@ -288,6 +290,7 @@ inline void unixDie(const string &why)
 
 string makeHexDump(const string& str);
 void shuffle(vector<DNSResourceRecord>& rrs);
+void orderAndShuffle(vector<DNSResourceRecord>& rrs);
 
 void normalizeTV(struct timeval& tv);
 const struct timeval operator+(const struct timeval& lhs, const struct timeval& rhs);
@@ -347,6 +350,12 @@ public:
       return atomic_exchange_and_add( &value_, +1 ) + 1;
     }
 
+    unsigned int operator++(int)
+    {
+      return atomic_exchange_and_add( &value_, +1 );
+    }
+
+
     unsigned int operator--()
     {
       return atomic_exchange_and_add( &value_, -1 ) - 1;
@@ -401,6 +410,19 @@ struct CIStringCompare: public std::binary_function<string, string, bool>
   }
 };
 
+struct CIStringPairCompare: public std::binary_function<pair<string, uint16_t>, pair<string,uint16_t>, bool>  
+{
+  bool operator()(const pair<string, uint16_t>& a, const pair<string, uint16_t>& b) const
+  {
+    if(pdns_ilexicographical_compare(a.first, b.first))
+	return true;
+    if(pdns_ilexicographical_compare(b.first, a.first))
+	return false;
+    return a.second < b.second;
+  }
+};
+
+
 pair<string, string> splitField(const string& inp, char sepa);
 
 inline bool isCanonical(const string& dom)
@@ -448,5 +470,25 @@ replacing_insert(Index& i,const typename Index::value_type& x)
   return res;
 }
 
+/** very small regex wrapper */
+class Regex
+{
+public:
+  /** constructor that accepts the expression to regex */
+  Regex(const string &expr);
+  
+  ~Regex()
+  {
+    regfree(&d_preg);
+  }
+  /** call this to find out if 'line' matches your expression */
+  bool match(const string &line)
+  {
+    return regexec(&d_preg,line.c_str(),0,0,0)==0;
+  }
+  
+private:
+  regex_t d_preg;
+};
 
 #endif

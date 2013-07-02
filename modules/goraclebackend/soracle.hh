@@ -8,6 +8,10 @@
 #include "pdns/utility.hh" 
 #include <oci.h>
 
+#ifndef dsword
+typedef sb4 dsword;
+#endif
+
 class SOracle : public SSql
 {
 public:
@@ -31,7 +35,7 @@ private:
   OCIStmt   *d_statementHandles[10];
 
   struct oresult {
-    char content[256];
+  char content[4000];
     sb2 indicator;
   } d_fields[10];
   OCIStmt* d_handle;

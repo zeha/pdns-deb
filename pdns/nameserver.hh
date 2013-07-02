@@ -19,7 +19,7 @@
 #define NAMESERVER_HH
 
 #ifndef WIN32
-# include <sys/select.h>
+# include <poll.h>
 # include <sys/types.h>
 # include <sys/socket.h>
 # include <netinet/in.h>
@@ -31,8 +31,10 @@
 #endif // WIN32
 
 #include <vector>
+#include <boost/foreach.hpp>
 #include "statbag.hh"
 #include "namespaces.hh"
+#include "dnspacket.hh"
 
 /** This is the main class. It opens a socket on udp port 53 and waits for packets. Those packets can 
     be retrieved with the receive() member function, which returns a DNSPacket.
@@ -72,87 +74,16 @@ class UDPNameserver
 {
 public:
   UDPNameserver();  //!< Opens the socket
-  inline DNSPacket *receive(DNSPacket *prefilled=0); //!< call this in a while or for(;;) loop to get packets
+  DNSPacket *receive(DNSPacket *prefilled=0); //!< call this in a while or for(;;) loop to get packets
   static void send(DNSPacket *); //!< send a DNSPacket. Will call DNSPacket::truncate() if over 512 bytes
   
 private:
   vector<int> d_sockets;
   void bindIPv4();
   void bindIPv6();
-  fd_set d_rfds;
-  int d_highfd;
+  vector<pollfd> d_rfds;
 };
 
-inline DNSPacket *UDPNameserver::receive(DNSPacket *prefilled)
-{
-  ComboAddress remote;
-  extern StatBag S;
-
-  Utility::socklen_t addrlen;
-  int len=-1;
-  char mesg[513];
-  Utility::sock_t sock=-1;
-
-  memset( &remote, 0, sizeof( remote ));
-  addrlen=sizeof(remote);  
-  if(d_sockets.size()>1) {
-    fd_set rfds=d_rfds;
-    
-    select(d_highfd+1, &rfds, 0, 0,  0); // blocks
-
-    for(vector<int>::const_iterator i=d_sockets.begin();i!=d_sockets.end();++i) {
-      if(FD_ISSET(*i, &rfds)) {
-        sock=*i;
-        addrlen=sizeof(remote);
-        
-        len=0;
-
-        // XXX FIXME this code could be using recvmsg + ip_pktinfo on platforms that support it
-        
-        if((len=recvfrom(sock,mesg,sizeof(mesg)-1,0,(sockaddr*) &remote, &addrlen))<0) {
-          if(errno != EAGAIN)
-            L<<Logger::Error<<"recvfrom gave error, ignoring: "<<strerror(errno)<<endl;
-          return 0;
-        }
-        break;
-      }
-    }
-    if(sock==-1)
-      throw AhuException("select betrayed us! (should not happen)");
-  }
-  else {
-    sock=d_sockets[0];
-
-    len=0;
-    if((len=recvfrom(sock,mesg,512,0,(sockaddr*) &remote, &addrlen))<0) {
-      if(errno != EAGAIN)
-        L<<Logger::Error<<"recvfrom gave error, ignoring: "<<strerror(errno)<<endl;
-      return 0;
-    }
-  }
-  
-  DLOG(L<<"Received a packet " << len <<" bytes long from "<< remote.toString()<<endl);
-  
-  DNSPacket *packet;
-  if(prefilled)  // they gave us a preallocated packet
-    packet=prefilled;
-  else
-    packet=new DNSPacket; // don't forget to free it!
-  packet->d_dt.set(); // timing
-  packet->setSocket(sock);
-  packet->setRemote(&remote);
-  if(packet->parse(mesg, len)<0) {
-    S.inc("corrupt-packets");
-    S.ringAccount("remotes-corrupt", packet->getRemote());
-
-    if(!prefilled)
-      delete packet;
-    return 0; // unable to parse
-  }
-  
-  return packet;
-}
-
-
+bool AddressIsUs(const ComboAddress& remote);
 
 #endif

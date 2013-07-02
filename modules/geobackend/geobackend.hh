@@ -2,7 +2,7 @@
  *        	Copyright (C) 2004 Mark Bergsma <mark@nedworks.org>
  *        	This software is licensed under the terms of the GPL, version 2.
  * 
- *        	$Id: geobackend.hh 2324 2011-12-23 17:40:53Z peter $
+ *        	$Id$
  */
 
 

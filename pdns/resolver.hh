@@ -44,9 +44,6 @@ public:
   ResolverException(const string &reason) : AhuException(reason){}
 };
 
-// send out an update notification for a domain to an IPv4/v6 address
-int sendNotification(int sock, const string &domain, const ComboAddress& remote, uint16_t id);
-
 // make an IPv4 or IPv6 query socket 
 int makeQuerySocket(const ComboAddress& local, bool udpOrTCP);
 //! Resolver class. Can be used synchronously and asynchronously, over IPv4 and over IPv6 (simultaneously)
@@ -84,7 +81,12 @@ private:
 class AXFRRetriever : public boost::noncopyable
 {
   public:
-    AXFRRetriever(const ComboAddress& remote, const string& zone, const string& tsigkeyname=string(), const string& tsigalgorithm=string(), const string& tsigsecret=string());
+    AXFRRetriever(const ComboAddress& remote,
+        const string& zone,
+        const string& tsigkeyname=string(),
+        const string& tsigalgorithm=string(),
+        const string& tsigsecret=string(),
+        const ComboAddress* laddr = NULL);
 	~AXFRRetriever();
     int getChunk(Resolver::res_t &res);  
   

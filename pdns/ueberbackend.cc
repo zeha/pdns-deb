@@ -72,7 +72,8 @@ bool UeberBackend::loadmodule(const string &name)
   
   if(dlib == NULL) {
     L<<Logger::Warning <<"Unable to load module '"<<name<<"': "<<dlerror() << endl; 
-    L<<Logger::Warning <<"Trying to load gsqlite3backend? Make sure pdns_server was compiled with sqlite3!" <<endl;
+    if(name.find("gsqlite3")!=string::npos)
+      L<<Logger::Warning <<"Trying to load gsqlite3backend? Make sure pdns_server was compiled with sqlite3!" <<endl;
     return false;
   }
   
@@ -346,6 +347,7 @@ void UeberBackend::addNegCache(const Question &q)
   static int negqueryttl=::arg().asNum("negquery-cache-ttl");
   if(!negqueryttl)
     return;
+  // we should also not be storing negative answers if a pipebackend does scopeMask, but we can't pass a negative scopeMask in an empty set!
   PC.insert(q.qname, q.qtype, PacketCache::QUERYCACHE, "", negqueryttl, q.zoneId);
 }
 
@@ -353,6 +355,8 @@ void UeberBackend::addCache(const Question &q, const vector<DNSResourceRecord> &
 {
   extern PacketCache PC;
   static unsigned int queryttl=::arg().asNum("query-cache-ttl");
+  unsigned int cachettl;
+
   if(!queryttl)
     return;
   
@@ -360,13 +364,16 @@ void UeberBackend::addCache(const Question &q, const vector<DNSResourceRecord> &
   std::ostringstream ostr;
   boost::archive::binary_oarchive boa(ostr, boost::archive::no_header);
 
+  cachettl = queryttl;
   BOOST_FOREACH(DNSResourceRecord rr, rrs) {
     if (rr.ttl < queryttl)
-      queryttl = rr.ttl;
+      cachettl = rr.ttl;
+    if (rr.scopeMask)
+      return;
   }
-  
+
   boa << rrs;
-  PC.insert(q.qname, q.qtype, PacketCache::QUERYCACHE, ostr.str(), queryttl, q.zoneId);
+  PC.insert(q.qname, q.qtype, PacketCache::QUERYCACHE, ostr.str(), cachettl, q.zoneId);
 }
 
 void UeberBackend::alsoNotifies(const string &domain, set<string> *ips)
@@ -399,6 +406,8 @@ void UeberBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt
     }
     pthread_mutex_unlock(&d_mut);
   }
+
+  domain_id=zoneId;
 
   d_handle.i=0;
   d_handle.qtype=qtype;
@@ -500,7 +509,7 @@ bool UeberBackend::handle::get(DNSResourceRecord &r)
            <<" out of answers, taking next"<<endl);
       
       d_hinterBackend=parent->backends[i++];
-      d_hinterBackend->lookup(qtype,qname,pkt_p);
+      d_hinterBackend->lookup(qtype,qname,pkt_p,parent->domain_id);
     }
     else 
       break;

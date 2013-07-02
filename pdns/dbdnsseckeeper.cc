@@ -1,6 +1,6 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2001 - 2011  PowerDNS.COM BV
+    Copyright (C) 2001 - 2012  PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2 as 
@@ -40,8 +40,8 @@ using namespace boost::assign;
 
 DNSSECKeeper::keycache_t DNSSECKeeper::s_keycache;
 DNSSECKeeper::metacache_t DNSSECKeeper::s_metacache;
-pthread_mutex_t DNSSECKeeper::s_metacachelock = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t DNSSECKeeper::s_keycachelock = PTHREAD_MUTEX_INITIALIZER;
+pthread_rwlock_t DNSSECKeeper::s_metacachelock = PTHREAD_RWLOCK_INITIALIZER;
+pthread_rwlock_t DNSSECKeeper::s_keycachelock = PTHREAD_RWLOCK_INITIALIZER;
 AtomicCounter DNSSECKeeper::s_ops;
 time_t DNSSECKeeper::s_last_prune;
 
@@ -55,7 +55,7 @@ bool DNSSECKeeper::isSecuredZone(const std::string& zone)
   }
 
   {
-    Lock l(&s_keycachelock);
+    ReadLock l(&s_keycachelock);
     keycache_t::const_iterator iter = s_keycache.find(zone);
     if(iter != s_keycache.end() && iter->d_ttd > (unsigned int)time(0)) { 
       if(iter->d_keys.empty())
@@ -107,13 +107,22 @@ bool DNSSECKeeper::addKey(const std::string& name, bool keyOrZone, int algorithm
   return addKey(name, dspk, active);
 }
 
+void DNSSECKeeper::clearAllCaches() {
+  {
+    WriteLock l(&s_keycachelock);
+    s_keycache.clear();
+  }
+  WriteLock l(&s_metacachelock);
+  s_metacache.clear();
+}
+
 void DNSSECKeeper::clearCaches(const std::string& name)
 {
   {
-    Lock l(&s_keycachelock);
+    WriteLock l(&s_keycachelock);
     s_keycache.erase(name); 
   }
-  Lock l(&s_metacachelock);
+  WriteLock l(&s_metacachelock);
   pair<metacache_t::iterator, metacache_t::iterator> range = s_metacache.equal_range(name);
   while(range.first != range.second)
     s_metacache.erase(range.first++);
@@ -162,22 +171,22 @@ DNSSECPrivateKey DNSSECKeeper::getKeyById(const std::string& zname, unsigned int
 }
 
 
-void DNSSECKeeper::removeKey(const std::string& zname, unsigned int id)
+bool DNSSECKeeper::removeKey(const std::string& zname, unsigned int id)
 {
   clearCaches(zname);
-  d_keymetadb->removeDomainKey(zname, id);
+  return d_keymetadb->removeDomainKey(zname, id);
 }
 
-void DNSSECKeeper::deactivateKey(const std::string& zname, unsigned int id)
+bool DNSSECKeeper::deactivateKey(const std::string& zname, unsigned int id)
 {
   clearCaches(zname);
-  d_keymetadb->deactivateDomainKey(zname, id);
+  return d_keymetadb->deactivateDomainKey(zname, id);
 }
 
-void DNSSECKeeper::activateKey(const std::string& zname, unsigned int id)
+bool DNSSECKeeper::activateKey(const std::string& zname, unsigned int id)
 {
   clearCaches(zname);
-  d_keymetadb->activateDomainKey(zname, id);
+  return d_keymetadb->activateDomainKey(zname, id);
 }
 
 
@@ -191,7 +200,7 @@ void DNSSECKeeper::getFromMeta(const std::string& zname, const std::string& key,
   }
 
   {
-    Lock l(&s_metacachelock); 
+    ReadLock l(&s_metacachelock); 
     
     metacache_t::const_iterator iter = s_metacache.find(tie(zname, key));
     if(iter != s_metacache.end() && iter->d_ttd > now) {
@@ -210,7 +219,7 @@ void DNSSECKeeper::getFromMeta(const std::string& zname, const std::string& key,
   nce.d_key= key;
   nce.d_value = value;
   { 
-    Lock l(&s_metacachelock);
+    WriteLock l(&s_metacachelock);
     replacing_insert(s_metacache, nce);
   }
 }
@@ -235,40 +244,42 @@ bool DNSSECKeeper::getNSEC3PARAM(const std::string& zname, NSEC3PARAMRecordConte
   return true;
 }
 
-void DNSSECKeeper::setNSEC3PARAM(const std::string& zname, const NSEC3PARAMRecordContent& ns3p, const bool& narrow)
+bool DNSSECKeeper::setNSEC3PARAM(const std::string& zname, const NSEC3PARAMRecordContent& ns3p, const bool& narrow)
 {
   clearCaches(zname);
   string descr = ns3p.getZoneRepresentation();
   vector<string> meta;
   meta.push_back(descr);
-  d_keymetadb->setDomainMetadata(zname, "NSEC3PARAM", meta);
-  
-  meta.clear();
-  if(narrow)
-    meta.push_back("1");
-  d_keymetadb->setDomainMetadata(zname, "NSEC3NARROW", meta);
+  if (d_keymetadb->setDomainMetadata(zname, "NSEC3PARAM", meta)) {
+    meta.clear();
+    
+    if(narrow)
+      meta.push_back("1");
+    
+    return d_keymetadb->setDomainMetadata(zname, "NSEC3NARROW", meta);
+  }
+  return false;
 }
 
-void DNSSECKeeper::unsetNSEC3PARAM(const std::string& zname)
+bool DNSSECKeeper::unsetNSEC3PARAM(const std::string& zname)
 {
   clearCaches(zname);
-  d_keymetadb->setDomainMetadata(zname, "NSEC3PARAM", vector<string>());
-  d_keymetadb->setDomainMetadata(zname, "NSEC3NARROW", vector<string>());
+  return (d_keymetadb->setDomainMetadata(zname, "NSEC3PARAM", vector<string>()) && d_keymetadb->setDomainMetadata(zname, "NSEC3NARROW", vector<string>()));
 }
 
 
-void DNSSECKeeper::setPresigned(const std::string& zname)
+bool DNSSECKeeper::setPresigned(const std::string& zname)
 {
   clearCaches(zname);
   vector<string> meta;
   meta.push_back("1");
-  d_keymetadb->setDomainMetadata(zname, "PRESIGNED", meta);
+  return d_keymetadb->setDomainMetadata(zname, "PRESIGNED", meta);
 }
 
-void DNSSECKeeper::unsetPresigned(const std::string& zname)
+bool DNSSECKeeper::unsetPresigned(const std::string& zname)
 {
   clearCaches(zname);
-  d_keymetadb->setDomainMetadata(zname, "PRESIGNED", vector<string>());
+  return d_keymetadb->setDomainMetadata(zname, "PRESIGNED", vector<string>());
 }
 
 
@@ -281,7 +292,7 @@ DNSSECKeeper::keyset_t DNSSECKeeper::getKeys(const std::string& zone, boost::tri
   }
 
   {
-    Lock l(&s_keycachelock);
+    ReadLock l(&s_keycachelock);
     keycache_t::const_iterator iter = s_keycache.find(zone);
       
     if(iter != s_keycache.end() && iter->d_ttd > now) { 
@@ -329,30 +340,42 @@ DNSSECKeeper::keyset_t DNSSECKeeper::getKeys(const std::string& zone, boost::tri
   kce.d_keys = allkeyset;
   kce.d_ttd = now + 30;
   {
-    Lock l(&s_keycachelock);
+    WriteLock l(&s_keycachelock);
     replacing_insert(s_keycache, kce);
   }
   
   return retkeyset;
 }
 
-bool DNSSECKeeper::secureZone(const std::string& name, int algorithm)
+bool DNSSECKeeper::secureZone(const std::string& name, int algorithm, int size)
 {
   clearCaches(name); // just to be sure ;)
-  return addKey(name, true, algorithm);
+  return addKey(name, true, algorithm, size);
 }
 
-bool DNSSECKeeper::getPreRRSIGs(DNSBackend& db, const std::string& signer, const std::string& qname, const QType& qtype, 
-	DNSPacketWriter::Place signPlace, vector<DNSResourceRecord>& rrsigs)
+bool DNSSECKeeper::getPreRRSIGs(DNSBackend& db, const std::string& signer, const std::string& qname, 
+	const std::string& wildcardname, const QType& qtype, 
+	DNSPacketWriter::Place signPlace, vector<DNSResourceRecord>& rrsigs, uint32_t signTTL)
 {
-  // cerr<<"Doing DB lookup for precomputed RRSIGs for '"<<qname<<"'"<<endl;
-	db.lookup(QType(QType::RRSIG), qname);
+  // cerr<<"Doing DB lookup for precomputed RRSIGs for '"<<(wildcardname.empty() ? qname : wildcardname)<<"'"<<endl;
+	SOAData sd;
+	sd.db=(DNSBackend *)-1; // force uncached answer
+	if(!db.getSOA(signer, sd)) {
+		DLOG(L<<"Could not get SOA for domain"<<endl);
+		return false;
+	}
+	db.lookup(QType(QType::RRSIG), wildcardname.empty() ? qname : wildcardname, NULL, sd.domain_id);
 	DNSResourceRecord rr;
 	while(db.get(rr)) { 
 		// cerr<<"Considering for '"<<qtype.getName()<<"' RRSIG '"<<rr.content<<"'\n";
-		if(boost::starts_with(rr.content, qtype.getName()+" ")) {
+		vector<string> parts;
+		stringtok(parts, rr.content);
+		if(parts[0] == qtype.getName() && pdns_iequals(parts[7], signer+".")) {
 			// cerr<<"Got it"<<endl;
+			if (!wildcardname.empty())
+				rr.qname = qname;
 			rr.d_place = (DNSResourceRecord::Place)signPlace;
+			rr.ttl = signTTL;
 			rrsigs.push_back(rr);
 		}
 		else ; // cerr<<"Skipping!"<<endl;
@@ -394,11 +417,11 @@ void DNSSECKeeper::cleanup()
 
   if(now.tv_sec - s_last_prune > (time_t)(30)) {
     {
-        Lock l(&s_metacachelock);
+        WriteLock l(&s_metacachelock);
         pruneCollection(s_metacache, ::arg().asNum("max-cache-entries"));
     }
     {
-        Lock l(&s_keycachelock);
+        WriteLock l(&s_keycachelock);
         pruneCollection(s_keycache, ::arg().asNum("max-cache-entries"));
     }
     s_last_prune=time(0);

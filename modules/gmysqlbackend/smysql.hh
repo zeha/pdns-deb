@@ -1,6 +1,6 @@
 /* Copyright 2001 Netherlabs BV, bert.hubert@netherlabs.nl. See LICENSE 
    for more information.
-   $Id: smysql.hh 2591 2012-04-29 14:47:17Z peter $  */
+   $Id$  */
 #ifndef SMYSQL_HH
 #define SMYSQL_HH
 
@@ -12,8 +12,8 @@ class SMySQL : public SSql
 {
 public:
   SMySQL(const string &database, const string &host="", uint16_t port=0,
-         const string &msocket="",const string &user="", 
-         const string &password="");
+         const string &msocket="",const string &user="",
+         const string &password="", const string &group="");
 
   ~SMySQL();
   

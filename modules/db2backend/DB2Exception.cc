@@ -1,4 +1,4 @@
-// $Id: DB2Exception.cc 477 2005-09-03 18:15:37Z ahu $
+// $Id$
 
 #include "DB2Exception.hh"
 

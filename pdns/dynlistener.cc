@@ -1,6 +1,6 @@
  /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2002 - 2008  PowerDNS.COM BV
+    Copyright (C) 2002 - 2013  PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2 as 
@@ -63,25 +63,55 @@ void DynListener::createSocketAndBind(int family, struct sockaddr*local, size_t 
   Utility::setCloseOnExec(d_s);
 
   if(d_s < 0) {
-    L<<Logger::Error<<"Creating socket for dynlistener: "<<strerror(errno)<<endl;;
+    if (family == AF_UNIX)
+      L<<Logger::Error<<"Unable to create control socket at '"<<((struct sockaddr_un*)local)->sun_path<<"', reason: "<<strerror(errno)<<endl;
+    else
+      L<<Logger::Error<<"Unable to create control socket on '"<<((ComboAddress *)local)->toStringWithPort()<<"', reason: "<<strerror(errno)<<endl;
     exit(1);
   }
   
   int tmp=1;
   if(setsockopt(d_s,SOL_SOCKET,SO_REUSEADDR,(char*)&tmp,sizeof tmp)<0)
-    throw AhuException(string("Setsockopt failed: ")+strerror(errno));
+    throw AhuException(string("Setsockopt failed on control socket: ")+strerror(errno));
     
   if(bind(d_s, local, len) < 0) {
-    L<<Logger::Critical<<"Binding to dynlistener: "<<strerror(errno)<<endl;
+    if (family == AF_UNIX)
+      L<<Logger::Critical<<"Unable to bind to control socket at '"<<((struct sockaddr_un*)local)->sun_path<<"', reason: "<<strerror(errno)<<endl;
+    else
+      L<<Logger::Critical<<"Unable to bind to control socket on '"<<((ComboAddress *)local)->toStringWithPort()<<"', reason: "<<strerror(errno)<<endl;
     exit(1);
   }
 }
 
+/* this does a simplistic check, if we can connect, we consider it live. If we can't connect because
+   of access denied, we must consider it dead, nothing we can do about it.
+*/
+bool DynListener::testLive(const string& fname)
+{
+  struct sockaddr_un addr;
+  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if(fd < 0) { // we'll have bigger issues down the road
+    return false;
+  }
+
+  memset(&addr, 0, sizeof(addr));
+  addr.sun_family = AF_UNIX;
+  strncpy(addr.sun_path, fname.c_str(), fname.length());
+
+  int status = connect(fd, (struct sockaddr*)&addr, sizeof(addr));
+  close(fd);
+  return status==0;
+}
+
 void DynListener::listenOnUnixDomain(const string& fname)
 {
+  if(testLive(fname)) {
+    L<<Logger::Critical<<"Previous controlsocket '"<<fname<<"' is in use"<<endl;
+    exit(1);
+  }
   int err=unlink(fname.c_str());
   if(err < 0 && errno!=ENOENT) {
-    L<<Logger::Critical<<"Unable to remove (previous) controlsocket: "<<strerror(errno)<<endl;
+    L<<Logger::Critical<<"Unable to remove (previous) controlsocket at '"<<fname<<"': "<<strerror(errno)<<endl;
     exit(1);
   }
 
@@ -93,10 +123,10 @@ void DynListener::listenOnUnixDomain(const string& fname)
   createSocketAndBind(AF_UNIX, (struct sockaddr*)& local, sizeof(local));
   d_socketname=fname;
   if(!arg()["setgid"].empty()) {
-    if(chown(fname.c_str(),static_cast<uid_t>(-1),Utility::makeGidNumeric(arg()["setgid"]))<0)
-      L<<Logger::Error<<"Unable to change group ownership of controlsocket: "<<strerror(errno)<<endl;
     if(chmod(fname.c_str(),0660)<0)
-      L<<Logger::Error<<"Unable to change group access mode of controlsocket: "<<strerror(errno)<<endl;
+      L<<Logger::Error<<"Unable to change group access mode of controlsocket at '"<<fname<<"', reason: "<<strerror(errno)<<endl;
+    if(chown(fname.c_str(),static_cast<uid_t>(-1),Utility::makeGidNumeric(arg()["setgid"]))<0)
+      L<<Logger::Error<<"Unable to change group ownership of controlsocket at '"<<fname<<"', reason: "<<strerror(errno)<<endl;
   }
   
   listen(d_s, 10);
@@ -166,6 +196,7 @@ void *DynListener::theListenerHelper(void *p)
 {
   DynListener *us=static_cast<DynListener *>(p);
   us->theListener();
+  L<<Logger::Error<<"Control listener aborted, please file a bug!"<<endl;
   return 0;
 }
 
@@ -212,8 +243,10 @@ string DynListener::getLine()
           continue;
         }
       }
+      errno=0;
       if(!fgets(&mesg[0], mesg.size(), fp.get())) {
-        L<<Logger::Error<<"Unable to receive line from controlsocket ("<<d_client<<"): "<<strerror(errno)<<endl;
+        if(errno)
+	  L<<Logger::Error<<"Unable to receive line from controlsocket ("<<d_client<<"): "<<strerror(errno)<<endl;
         close(d_client);
         continue;
       }

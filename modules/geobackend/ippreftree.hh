@@ -2,7 +2,7 @@
  *         Copyright (C) 2004 Mark Bergsma <mark@nedworks.org>
  *        	This software is licensed under the terms of the GPL, version 2.
  * 
- *         $Id: ippreftree.hh 1985 2011-02-07 09:39:22Z ahu $
+ *         $Id$
  */
 
 #include <string>
