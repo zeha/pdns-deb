@@ -24,6 +24,7 @@
 
 #include <sys/types.h>
 #include "dnspacket.hh"
+#include "dns.hh"
 
 string DNSBackend::getRemote(DNSPacket *p)
 {
@@ -182,7 +183,13 @@ vector<DNSBackend *>BackendMakerClass::all(bool metadataOnly)
       ret.push_back(made);
     }
   }
-  catch(...) {
+  catch(AhuException &ae) {
+    L<<Logger::Error<<"Caught an exception instantiating a backend: "<<ae.reason<<endl;
+    L<<Logger::Error<<"Cleaning up"<<endl;
+    for(vector<DNSBackend *>::const_iterator i=ret.begin();i!=ret.end();++i)
+      delete *i;
+    throw;
+  } catch(...) {
     // and cleanup
     L<<Logger::Error<<"Caught an exception instantiating a backend, cleaning up"<<endl;
     for(vector<DNSBackend *>::const_iterator i=ret.begin();i!=ret.end();++i)
@@ -230,8 +237,14 @@ bool DNSBackend::getSOA(const string &domain, SOAData &sd, DNSPacket *p)
   if(sd.nameserver.empty())
     sd.nameserver=arg()["default-soa-name"];
   
-  if(sd.hostmaster.empty())
-    sd.hostmaster="hostmaster."+domain;
+  if(sd.hostmaster.empty()) {
+    if (!arg().isEmpty("default-soa-mail")) {
+      sd.hostmaster=arg()["default-soa-mail"];
+      attodot(sd.hostmaster);
+    }
+    else
+      sd.hostmaster="hostmaster."+domain;
+  }
 
   if(!sd.serial) { // magic time!
     DLOG(L<<Logger::Warning<<"Doing soa serialnumber autocalculation for "<<rr.qname<<endl);
@@ -252,14 +265,15 @@ bool DNSBackend::getSOA(const string &domain, SOAData &sd, DNSPacket *p)
 bool DNSBackend::getBeforeAndAfterNames(uint32_t id, const std::string& zonename, const std::string& qname, std::string& before, std::string& after)
 {
   string lcqname=toLower(qname);
-  lcqname=makeRelative(qname, zonename);
+  string lczonename=toLower(zonename);
+  lcqname=makeRelative(lcqname, lczonename);
   
   lcqname=labelReverse(lcqname);
   string dnc;
   bool ret = this->getBeforeAndAfterNamesAbsolute(id, lcqname, dnc, before, after);
   
-  before=dotConcat(labelReverse(before), zonename);
-  after=dotConcat(labelReverse(after), zonename);
+  before=dotConcat(labelReverse(before), lczonename);
+  after=dotConcat(labelReverse(after), lczonename);
   return ret;
 }
 

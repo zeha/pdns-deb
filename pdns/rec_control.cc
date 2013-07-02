@@ -49,13 +49,18 @@ static void initArguments(int argc, char** argv)
     cerr<<arg().helpstring(arg()["help"])<<endl;
     exit(99);
   }
+  string configname=::arg()["config-dir"]+"/recursor.conf";
+  cleanSlashes(configname);
+
+  if(!::arg().preParseFile(configname.c_str(), "socket-dir", LOCALSTATEDIR)) 
+    cerr<<"Warning: unable to parse configuration file '"<<configname<<"'"<<endl;
+  arg().laxParse(argc,argv);   // make sure the commandline wins
 }
 
 int main(int argc, char** argv)
 try
 {
   initArguments(argc, argv);
-
   RecursorControlChannel rccS;
   string sockname="pdns_recursor";
   if(!arg()["process"].empty())

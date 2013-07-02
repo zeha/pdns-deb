@@ -1,6 +1,6 @@
 // -*- sateh-c -*- 
 // File    : pdnsbackend.cc
-// Version : $Id: pipebackend.cc 2284 2011-10-24 07:05:42Z peter $ 
+// Version : $Id$ 
 //
 
 #include <string>
@@ -48,7 +48,10 @@ void CoWrapper::launch()
    if(d_cp)
       return;
 
-   d_cp=new CoProcess(d_command, d_timeout); 
+   if(isUnixSocket(d_command))
+     d_cp = new UnixRemote(d_command, d_timeout);
+   else
+     d_cp = new CoProcess(d_command, d_timeout); 
    d_cp->send("HELO\t"+lexical_cast<string>(::arg().asNum("pipebackend-abi-version")));
    string banner;
    d_cp->receive(banner); 
@@ -196,7 +199,6 @@ bool PipeBackend::get(DNSResourceRecord &r)
      extraFields = 2;
      
    for(;;) {
-     
       d_coproc->receive(line);
       vector<string>parts;
       stringtok(parts,line,"\t");
@@ -233,8 +235,6 @@ bool PipeBackend::get(DNSResourceRecord &r)
          r.ttl=atoi(parts[4+extraFields].c_str());
          r.domain_id=atoi(parts[5+extraFields].c_str());
          
-         
- 
          if(r.qtype.getCode() != QType::MX && r.qtype.getCode() != QType::SRV) {
            r.content.clear();
            for(unsigned int n= 6 + extraFields; n < parts.size(); ++n) {
@@ -272,7 +272,7 @@ class PipeFactory : public BackendFactory
       void declareArguments(const string &suffix="")
       {
          declare(suffix,"command","Command to execute for piping questions to","");
-         declare(suffix,"timeout","Number of milliseconds to wait for an answer","1000");
+         declare(suffix,"timeout","Number of milliseconds to wait for an answer","2000");
          declare(suffix,"regex","Regular exception of queries to pass to coprocess","");
       }
 

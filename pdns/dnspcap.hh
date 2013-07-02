@@ -13,6 +13,9 @@
 #if defined(__NetBSD__)
 #include <net/if.h>
 #include <net/if_ether.h>
+#elif defined (__OpenBSD__)
+#include <net/if.h>
+#include <netinet/if_ether.h>
 #elif defined (__SVR4) && defined (__sun)
 #include <sys/ethernet.h>
 #else

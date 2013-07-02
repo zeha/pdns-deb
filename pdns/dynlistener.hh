@@ -55,6 +55,7 @@ public:
   
   static void registerFunc(const string &name, g_funk_t *gf, const string &usage="", const string &args="");
   static void registerRestFunc(g_funk_t *gf);
+  static g_funk_t* getFunc(const string& fname) { return s_funcdb[fname].func; } 
 private:
   void sendLine(const string &line);
   string getHelp();
@@ -83,5 +84,6 @@ private:
   ComboAddress d_socketaddress;
   static g_funkdb_t s_funcdb;
   static g_funk_t* s_restfunc;
+  bool testLive(const string& fname);
 };
 #endif /* PDNS_DYNLISTENER */

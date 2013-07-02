@@ -96,6 +96,11 @@ public:
   //! Calculates a SOA serial for the zone and stores it in the third argument.
   virtual bool calculateSOASerial(const string& domain, const SOAData& sd, time_t& serial);
 
+  virtual bool replaceRRSet(uint32_t domain_id, const string& qname, const QType& qt, const vector<DNSResourceRecord>& rrset)
+  {
+    return false;
+  }
+
   // the DNSSEC related (getDomainMetadata has broader uses too)
   virtual bool getDomainMetadata(const string& name, const std::string& kind, std::vector<std::string>& meta) { return false; }
   virtual bool setDomainMetadata(const string& name, const std::string& kind, const std::vector<std::string>& meta) {return false;}
@@ -136,7 +141,27 @@ public:
     return false;
   }
 
+  virtual bool updateEmptyNonTerminals(uint32_t domain_id, const std::string& zonename, set<string>& insert, set<string>& erase, bool remove)
+  {
+    return false;
+  }
+
+  virtual bool nullifyDNSSECOrderNameAndUpdateAuth(uint32_t domain_id, const std::string& qname, bool auth)
+  {
+    return false;
+  }
+
   virtual bool nullifyDNSSECOrderNameAndAuth(uint32_t domain_id, const std::string& qname, const std::string& type)
+  {
+    return false;
+  }
+
+  virtual bool setDNSSECAuthOnDsRecord(uint32_t domain_id, const std::string& qname)
+  {
+    return false;
+  }
+
+  virtual bool doesDNSSEC()
   {
     return false;
   }
@@ -176,10 +201,19 @@ public:
   }
 
   //! feeds a record to a zone, needs a call to startTransaction first
-  virtual bool feedRecord(const DNSResourceRecord &rr)
+  virtual bool feedRecord(const DNSResourceRecord &rr, string *ordername=0)
   {
     return false; // no problem!
   }
+  virtual bool feedEnts(int domain_id, set<string> &nonterm)
+  {
+    return false;
+  }
+  virtual bool feedEnts3(int domain_id, const string &domain, set<string> &nonterm, unsigned int times, const string &salt, bool narrow)
+  {
+    return false;
+  }
+
   //! if this returns true, DomainInfo di contains information about the domain
   virtual bool getDomainInfo(const string &domain, DomainInfo &di)
   {

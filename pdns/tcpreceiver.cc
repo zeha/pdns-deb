@@ -1,6 +1,6 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2002-2011  PowerDNS.COM BV
+    Copyright (C) 2002-2012  PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
@@ -194,6 +194,7 @@ catch(NetworkError& ae) {
 static void proxyQuestion(shared_ptr<DNSPacket> packet)
 {
   int sock=socket(AF_INET, SOCK_STREAM, 0);
+  
   Utility::setCloseOnExec(sock);
   if(sock < 0)
     throw NetworkError("Error making TCP connection socket to recursor: "+stringerror());
@@ -213,13 +214,11 @@ static void proxyQuestion(shared_ptr<DNSPacket> packet)
     writenWithTimeout(sock, &len, 2);
     writenWithTimeout(sock, buffer.c_str(), buffer.length());
     
-    int ret;
-    
-    ret=readnWithTimeout(sock, &len, 2);
+    readnWithTimeout(sock, &len, 2);
     len=ntohs(len);
 
     char answer[len];
-    ret=readnWithTimeout(sock, answer, len);
+    readnWithTimeout(sock, answer, len);
 
     slen=htons(len);
     writenWithTimeout(packet->getSocket(), &slen, 2);
@@ -345,7 +344,7 @@ void *TCPNameserver::doConnection(void *data)
     L<<Logger::Error<<"TCP nameserver had error, cycling backend: "<<ae.reason<<endl;
   }
   catch(NetworkError &e) {
-    L<<Logger::Info<<"TCP Connection Thread died because of STL error: "<<e.what()<<endl;
+    L<<Logger::Info<<"TCP Connection Thread died because of network error: "<<e.what()<<endl;
   }
 
   catch(std::exception &e) {
@@ -455,6 +454,7 @@ namespace {
   {
     set<uint16_t> d_set;
     unsigned int d_ttl;
+    bool d_auth;
   };
 
   DNSResourceRecord makeDNSRRFromSOAData(const SOAData& sd)
@@ -490,6 +490,7 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
   bool NSEC3Zone=false;
   
   DNSSECKeeper dk;
+  dk.clearCaches(target);
   bool securedZone = dk.isSecuredZone(target);
   if(dk.getNSEC3PARAM(target, &ns3pr, &narrow)) {
     NSEC3Zone=true;
@@ -592,25 +593,37 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
   
   DNSResourceRecord rr;
   
+  rr.qname = target;
+  rr.ttl = sd.default_ttl;
+  rr.auth = 1; // please sign!
+
   BOOST_FOREACH(const DNSSECKeeper::keyset_t::value_type& value, keys) {
-    rr.qname = target;
     rr.qtype = QType(QType::DNSKEY);
-    rr.ttl = sd.default_ttl;
-    rr.auth = 1; // please sign! 
     rr.content = value.first.getDNSKEY().getZoneRepresentation();
     string keyname = NSEC3Zone ? hashQNameWithSalt(ns3pr.d_iterations, ns3pr.d_salt, rr.qname) : labelReverse(rr.qname);
     NSECXEntry& ne = nsecxrepo[keyname];
     
     ne.d_set.insert(rr.qtype.getCode());
-    ne.d_ttl = rr.ttl;
+    ne.d_ttl = sd.default_ttl;
     csp.submit(rr);
   }
   
+  if(::arg().mustDo("experimental-direct-dnskey")) {
+    sd.db->lookup(QType(QType::DNSKEY), target, NULL, sd.domain_id);
+    while(sd.db->get(rr)) {
+      rr.ttl = sd.default_ttl;
+      csp.submit(rr);
+    }
+  }
+
+  uint8_t flags;
+
   if(NSEC3Zone) { // now stuff in the NSEC3PARAM
+    flags = ns3pr.d_flags;
     rr.qtype = QType(QType::NSEC3PARAM);
     ns3pr.d_flags = 0;
     rr.content = ns3pr.getZoneRepresentation();
-    ns3pr.d_flags = 1;
+    ns3pr.d_flags = flags;
     string keyname = hashQNameWithSalt(ns3pr.d_iterations, ns3pr.d_salt, rr.qname);
     NSECXEntry& ne = nsecxrepo[keyname];
     
@@ -633,13 +646,30 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
   dt.set();
   int records=0;
   while(sd.db->get(rr)) {
+    if (rr.qtype.getCode() == QType::RRSIG)
+      continue;
+
+    // only skip the DNSKEY if direct-dnskey is enabled, to avoid changing behaviour
+    // when it is not enabled.
+    if(::arg().mustDo("experimental-direct-dnskey") && rr.qtype.getCode() == QType::DNSKEY)
+      continue;
+
     records++;
-    if(securedZone && (rr.auth || (!NSEC3Zone && rr.qtype.getCode() == QType::NS) || rr.qtype.getCode() == QType::DS)) { // this is probably NSEC specific, NSEC3 is different
-      keyname = NSEC3Zone ? hashQNameWithSalt(ns3pr.d_iterations, ns3pr.d_salt, rr.qname) : labelReverse(rr.qname);
-      NSECXEntry& ne = nsecxrepo[keyname];
-      ne.d_set.insert(rr.qtype.getCode());
-      ne.d_ttl = rr.ttl;
+    if(securedZone && (rr.auth || rr.qtype.getCode() == QType::NS)) {
+      if (NSEC3Zone || rr.qtype.getCode()) {
+        keyname = NSEC3Zone ? hashQNameWithSalt(ns3pr.d_iterations, ns3pr.d_salt, rr.qname) : labelReverse(rr.qname);
+        NSECXEntry& ne = nsecxrepo[keyname];
+        ne.d_ttl = sd.default_ttl;
+        ne.d_auth = (ne.d_auth || rr.auth || (NSEC3Zone && !ns3pr.d_flags));
+        if (rr.qtype.getCode()) {
+          ne.d_set.insert(rr.qtype.getCode());
+        }
+      }
     }
+
+    if (!rr.qtype.getCode())
+      continue; // skip empty non-terminals
+
     if(rr.qtype.getCode() == QType::SOA)
       continue; // skip SOA - would indicate end of AXFR
 
@@ -664,41 +694,49 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
   cerr<<"Outstanding: "<<csp.d_outstanding<<", "<<csp.d_queued - csp.d_signed << endl;
   cerr<<"Ready for consumption: "<<csp.getReady()<<endl;
   */
-  if(securedZone) {   
+  if(securedZone) {
     if(NSEC3Zone) {
       for(nsecxrepo_t::const_iterator iter = nsecxrepo.begin(); iter != nsecxrepo.end(); ++iter) {
-        NSEC3RecordContent n3rc;
-        n3rc.d_set = iter->second.d_set;
-        n3rc.d_set.insert(QType::RRSIG);
-        n3rc.d_salt=ns3pr.d_salt;
-        n3rc.d_flags = ns3pr.d_flags;
-        n3rc.d_iterations = ns3pr.d_iterations;
-        n3rc.d_algorithm = 1; // SHA1, fixed in PowerDNS for now
-        if(boost::next(iter) != nsecxrepo.end()) {
-          n3rc.d_nexthash = boost::next(iter)->first;
-        }
-        else
-          n3rc.d_nexthash=nsecxrepo.begin()->first;
-    
-        rr.qname = dotConcat(toLower(toBase32Hex(iter->first)), sd.qname);
-    
-        rr.ttl = iter->second.d_ttl;
-        rr.content = n3rc.getZoneRepresentation();
-        rr.qtype = QType::NSEC3;
-        rr.d_place = DNSResourceRecord::ANSWER;
-        rr.auth=true;
-        if(csp.submit(rr)) {
-          for(;;) {
-            outpacket->getRRS() = csp.getChunk();
-            if(!outpacket->getRRS().empty()) {
-              if(!tsigkeyname.empty())
-                outpacket->setTSIGDetails(trc, tsigkeyname, tsigsecret, trc.d_mac, true);
-              sendPacket(outpacket, outsock);
-              trc.d_mac=outpacket->d_trc.d_mac;
-              outpacket=getFreshAXFRPacket(q);
+        if(iter->second.d_auth) {
+          NSEC3RecordContent n3rc;
+          n3rc.d_set = iter->second.d_set;
+          if (n3rc.d_set.size() && (n3rc.d_set.size() != 1 || !n3rc.d_set.count(QType::NS)))
+            n3rc.d_set.insert(QType::RRSIG);
+          n3rc.d_salt=ns3pr.d_salt;
+          n3rc.d_flags = ns3pr.d_flags;
+          n3rc.d_iterations = ns3pr.d_iterations;
+          n3rc.d_algorithm = 1; // SHA1, fixed in PowerDNS for now
+          nsecxrepo_t::const_iterator inext = iter;
+          inext++;
+          if(inext == nsecxrepo.end())
+            inext = nsecxrepo.begin();
+          while(!(inext->second.d_auth) && inext != iter)
+          {
+            inext++;
+            if(inext == nsecxrepo.end())
+              inext = nsecxrepo.begin();
+          }
+          n3rc.d_nexthash = inext->first;
+          rr.qname = dotConcat(toLower(toBase32Hex(iter->first)), sd.qname);
+
+          rr.ttl = sd.default_ttl;
+          rr.content = n3rc.getZoneRepresentation();
+          rr.qtype = QType::NSEC3;
+          rr.d_place = DNSResourceRecord::ANSWER;
+          rr.auth=true;
+          if(csp.submit(rr)) {
+            for(;;) {
+              outpacket->getRRS() = csp.getChunk();
+              if(!outpacket->getRRS().empty()) {
+                if(!tsigkeyname.empty())
+                  outpacket->setTSIGDetails(trc, tsigkeyname, tsigsecret, trc.d_mac, true);
+                sendPacket(outpacket, outsock);
+                trc.d_mac=outpacket->d_trc.d_mac;
+                outpacket=getFreshAXFRPacket(q);
+              }
+              else
+                break;
             }
-            else
-              break;
           }
         }
       }
@@ -716,12 +754,11 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
   
       rr.qname = labelReverse(iter->first);
   
-      rr.ttl = iter->second.d_ttl;
+      rr.ttl = sd.default_ttl;
       rr.content = nrc.getZoneRepresentation();
       rr.qtype = QType::NSEC;
       rr.d_place = DNSResourceRecord::ANSWER;
       rr.auth=true;
-      
       if(csp.submit(rr)) {
         for(;;) {
           outpacket->getRRS() = csp.getChunk();
@@ -797,8 +834,6 @@ TCPNameserver::TCPNameserver()
   if(locals.empty() && locals6.empty())
     throw AhuException("No local address specified");
 
-  d_highfd=0;
-
   vector<string> parts;
   stringtok( parts, ::arg()["allow-axfr-ips"], ", \t" ); // is this IP on the guestlist?
   for( vector<string>::const_iterator i = parts.begin(); i != parts.end(); ++i ) {
@@ -811,10 +846,11 @@ TCPNameserver::TCPNameserver()
 
   for(vector<string>::const_iterator laddr=locals.begin();laddr!=locals.end();++laddr) {
     int s=socket(AF_INET,SOCK_STREAM,0); 
-    Utility::setCloseOnExec(s);
-
+    
     if(s<0) 
       throw AhuException("Unable to acquire TCP socket: "+stringerror());
+
+    Utility::setCloseOnExec(s);
 
     ComboAddress local(*laddr, ::arg().asNum("local-port"));
       
@@ -823,7 +859,7 @@ TCPNameserver::TCPNameserver()
       L<<Logger::Error<<"Setsockopt failed"<<endl;
       exit(1);  
     }
-
+    
     if(::bind(s, (sockaddr*)&local, local.getSocklen())<0) {
       L<<Logger::Error<<"binding to TCP socket: "<<strerror(errno)<<endl;
       throw AhuException("Unable to bind to TCP socket");
@@ -838,17 +874,16 @@ TCPNameserver::TCPNameserver()
     pfd.events = POLLIN;
 
     d_prfds.push_back(pfd);
-
-    d_highfd=max(s,d_highfd);
   }
 
 #if !WIN32 && HAVE_IPV6
   for(vector<string>::const_iterator laddr=locals6.begin();laddr!=locals6.end();++laddr) {
     int s=socket(AF_INET6,SOCK_STREAM,0); 
-    Utility::setCloseOnExec(s);
 
     if(s<0) 
       throw AhuException("Unable to acquire TCPv6 socket: "+stringerror());
+
+    Utility::setCloseOnExec(s);
 
     ComboAddress local(*laddr, ::arg().asNum("local-port"));
 
@@ -857,7 +892,9 @@ TCPNameserver::TCPNameserver()
       L<<Logger::Error<<"Setsockopt failed"<<endl;
       exit(1);  
     }
-
+    if(setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &tmp, sizeof(tmp)) < 0) {
+      L<<Logger::Error<<"Failed to set IPv6 socket to IPv6 only, continuing anyhow: "<<strerror(errno)<<endl;
+    }
     if(bind(s, (const sockaddr*)&local, local.getSocklen())<0) {
       L<<Logger::Error<<"binding to TCP socket: "<<strerror(errno)<<endl;
       throw AhuException("Unable to bind to TCPv6 socket");
@@ -873,7 +910,6 @@ TCPNameserver::TCPNameserver()
     pfd.events = POLLIN;
 
     d_prfds.push_back(pfd);
-    d_highfd=max(s, d_highfd);
   }
 #endif // WIN32
 }
@@ -882,9 +918,6 @@ TCPNameserver::TCPNameserver()
 //! Start of TCP operations thread, we launch a new thread for each incoming TCP question
 void TCPNameserver::thread()
 {
-  struct timeval tv;
-  tv.tv_sec=1;
-  tv.tv_usec=0;
   try {
     for(;;) {
       int fd;
@@ -918,7 +951,7 @@ void TCPNameserver::thread()
             if(room<1)
               L<<Logger::Warning<<Logger::NTLog<<"Limit of simultaneous TCP connections reached - raise max-tcp-connections"<<endl;
 
-            if(pthread_create(&tid, 0, &doConnection, (void *)fd)) {
+            if(pthread_create(&tid, 0, &doConnection, reinterpret_cast<void*>(fd))) {
               L<<Logger::Error<<"Error creating thread: "<<stringerror()<<endl;
               d_connectionroom_sem->post();
             }

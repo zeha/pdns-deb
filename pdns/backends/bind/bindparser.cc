@@ -83,7 +83,7 @@
 #include "namespaces.hh"
 #define YYDEBUG 1
 extern int yydebug;
-#include "bindparser.hh"
+#include "bindparserclasses.hh"
 
 #define YYSTYPE char *
 

@@ -1,6 +1,6 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2002  PowerDNS.COM BV
+    Copyright (C) 2002 - 2012 PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
@@ -25,12 +25,12 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <sstream>
-
-
+#include "misc.hh"
+#include "iputils.hh"
 
 void Session::init()
 {
-  d_bufsize=15049;
+  d_bufsize=15049; // why?!
 
   d_verbose=false;
 
@@ -88,127 +88,27 @@ Session::Session(const Session &s)
   memcpy(rdbuf,s.rdbuf,d_bufsize);
 }  
 
-Session::Session(const string &dest, int port, int timeout)
-{
-  struct hostent *h;
-  h=gethostbyname(dest.c_str());
-  if(!h)
-    throw SessionException("Unable to resolve target name");
-  
-  if(timeout)
-    d_timeout=timeout;
-
-  doConnect(*(int*)h->h_addr, port);
-}
-
-Session::Session(uint32_t ip, int port, int timeout)
-{
-  if(timeout)
-    d_timeout=timeout;
-
-  doConnect(ip, port);
-}
-
 void Session::setTimeout(unsigned int seconds)
 {
   d_timeout=seconds;
 }
 
   
-void Session::doConnect(uint32_t ip, int port)
-{
-  init();
-  clisock=socket(AF_INET,SOCK_STREAM,0);
-  Utility::setCloseOnExec(clisock);
-  
-  memset(&remote,0,sizeof(remote));
-  remote.sin_family=AF_INET;
-  remote.sin_port=htons(port);
-
-  remote.sin_addr.s_addr=ip;
-
-  Utility::setNonBlocking( clisock );
-
-  int err;
-#ifndef WIN32
-  if((err=connect(clisock,(struct sockaddr*)&remote,sizeof(remote)))<0 && errno!=EINPROGRESS) {
-#else
-  if((err=connect(clisock,(struct sockaddr*)&remote,sizeof(remote)))<0 && WSAGetLastError() != WSAEWOULDBLOCK ) {
-#endif // WIN32
-    throw SessionException("connect: "+stringerror());
-  }
-
-  if(!err)
-    goto done;
-
-  fd_set rset,wset;
-  struct timeval tval;
-
-  FD_ZERO(&rset);
-  FD_SET(clisock, &rset);
-  wset=rset;
-  tval.tv_sec=d_timeout;
-  tval.tv_usec=0;
-
-  if(!select(clisock+1,&rset,&wset,0,tval.tv_sec ? &tval : 0))
-    {
-      Utility::closesocket(clisock); // timeout
-      clisock=-1;
-      errno=ETIMEDOUT;
-  
-      throw SessionTimeoutException("Timeout connecting to server");
-    }
-  
-  if(FD_ISSET(clisock, &rset) || FD_ISSET(clisock, &wset))
-    {
-    Utility::socklen_t len=sizeof(err);
-      if(getsockopt(clisock, SOL_SOCKET,SO_ERROR,(char *)&err,&len)<0)
-        throw SessionException("Error connecting: "+stringerror()); // Solaris
-
-      if(err)
-        throw SessionException("Error connecting: "+string(strerror(err)));
-
-    }
-  else
-    throw SessionException("nonblocking connect failed");
-
- done:
-      Utility::setBlocking( clisock );
-}
-
 bool Session::putLine(const string &s)
 {
   int length=s.length();
   int written=0;
   int err;
 
-  while(written<length)
+  while(written < length)
     {
-      fd_set wset;
-      FD_ZERO(&wset);
-      FD_SET(clisock, &wset);
-      struct timeval tval;
-      tval.tv_sec=d_timeout;
-      tval.tv_usec=0;
-      
-      if(!select(clisock+1,0,&wset,0,tval.tv_sec ? &tval : 0))
-        throw SessionTimeoutException("timeout writing line");
+      err=waitForRWData(clisock, false, d_timeout, 0);
+      if(err<=0)
+        throw SessionException("nonblocking write failed: "+string(strerror(errno)));
 
-      if(FD_ISSET(clisock, &wset))
-        {
-        Utility::socklen_t len=sizeof(err);
-          if(getsockopt(clisock, SOL_SOCKET,SO_ERROR,(char *) &err,&len)<0)
-            throw SessionException(+strerror(err)); // Solaris..
-          
-          if(err)
-            throw SessionException(strerror(err));
-        }
-      else
-        throw SessionException("nonblocking write failed"+string(strerror(errno)));
+      err = send(clisock, s.c_str() + written, length-written, 0);
 
-      err=send(clisock,s.c_str()+written,length-written,0);
-
-      if(err<0)
+      if(err < 0)
         return false;
       
       written+=err;
@@ -226,35 +126,38 @@ char *strnchr(char *p, char c, int len)
   return 0;
 }
 
+string Session::get(unsigned int bytes)
+{
+  string ret;
+  if(wroffset - rdoffset >= (int)bytes) 
+  {
+    ret = string(rdbuf + rdoffset, bytes);
+    bytes -= ret.length();
+    rdoffset += ret.length();
+  }
+  
+  if(bytes) {
+    scoped_array<char> buffer(new char[bytes]);
+    int err = read(clisock, &buffer[0], bytes);  // XXX FIXME should be nonblocking
+    if(err < 0)
+      throw SessionException("Error reading bytes from client: "+string(strerror(errno)));
+    if(err != (int)bytes)
+      throw SessionException("Error reading bytes from client: partial read");
+    ret.append(&buffer[0], err);
+  }
+  return ret;
+}
+
 int Session::timeoutRead(int s, char *buf, size_t len)
 {
-  fd_set rset;
-  FD_ZERO(&rset);
-  FD_SET(clisock, &rset);
-  struct timeval tval;
-  tval.tv_sec=d_timeout;
-  tval.tv_usec=0;
+  int err = waitForRWData(s, true, d_timeout, 0);
   
-  int err;
-  
-  if(!select(clisock+1,&rset,0,0,tval.tv_sec ? &tval : 0))
+  if(!err)
     throw SessionTimeoutException("timeout reading");
-  
-  if(FD_ISSET(clisock, &rset))
-    {
-    Utility::socklen_t len=sizeof(err);
-      if(getsockopt(clisock, SOL_SOCKET,SO_ERROR,(char *)&err,&len)<0)
-        throw SessionException(strerror(errno)); // Solaris..
-      
-      if(err)
-        throw SessionException(strerror(err));
-    }
-  else
-    throw SessionException("nonblocking read failed"+string(strerror(errno)));
+  if(err < 0)
+    throw SessionException("nonblocking read failed: "+string(strerror(errno)));
   
   return recv(s,buf,len,0);
-      
-
 }
 
 bool 
@@ -274,7 +177,6 @@ Session::getLine(string &line)
   
   // read data into a buffer
   // find first \n, and return that as string, store how far we were
-
 
   for(;;)
     {
@@ -383,54 +285,24 @@ Session *Server::accept()
   return new Session(clisock, remote);
 }
 
-
-
-Server::Server(int p, const string &p_localaddress)
+Server::Server(int port, const string &localaddress)
 {
-  d_localaddress="0.0.0.0";
-  string localaddress=p_localaddress;
-  port=p;
+  d_local = ComboAddress(localaddress.empty() ? "0.0.0.0" : localaddress, port);
+  s = socket(d_local.sin4.sin_family ,SOCK_STREAM,0);
 
-  struct sockaddr_in local;
-  s=socket(AF_INET,SOCK_STREAM,0);
-  Utility::setCloseOnExec(s);
-
-  if(s<0)
+  if(s < 0)
     throw Exception(string("socket: ")+strerror(errno));
-  
-  memset(&local,0,sizeof(local));
-  
-  local.sin_family=AF_INET;
-  
-  struct hostent *h;
-  if(localaddress=="")
-    localaddress=d_localaddress;
 
-  if ( localaddress != "0.0.0.0" )
-  {
-    h=gethostbyname(localaddress.c_str());
-
-    if(!h)
-      throw Exception(); 
-  
-    local.sin_addr.s_addr=*(int*)h->h_addr;
-  }
-  else
-  {
-    local.sin_addr.s_addr = INADDR_ANY;
-  }
-
-  local.sin_port=htons(port);
+  Utility::setCloseOnExec(s);
   
   int tmp=1;
-  if(setsockopt(s,SOL_SOCKET,SO_REUSEADDR,(char*)&tmp,sizeof tmp)<0)
+  if(setsockopt(s, SOL_SOCKET, SO_REUSEADDR,(char*)&tmp,sizeof tmp)<0)
     throw SessionException(string("Setsockopt failed: ")+strerror(errno));
 
-  if(bind(s, (sockaddr*)&local,sizeof(local))<0)
-      throw SessionException("binding to port "+itoa(port)+string(" on ")+localaddress+": "+strerror(errno));
+  if(bind(s, (sockaddr*)&d_local, d_local.getSocklen())<0)
+    throw SessionException("binding to "+d_local.toStringWithPort()+": "+strerror(errno));
   
   if(listen(s,128)<0)
-      throw SessionException("listen: "+stringerror());
-
+    throw SessionException("listen: "+stringerror());
 }
 

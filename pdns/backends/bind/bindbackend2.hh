@@ -91,10 +91,10 @@ class BB2DomainInfo
 {
 public:
   BB2DomainInfo();
-
   void setCtime();
-
   bool current();
+  //! configure how often this domain should be checked for changes (on disk)
+  void setCheckInterval(time_t seconds);
 
   bool d_loaded;  //!< if a domain is loaded
   string d_status; //!< message describing status of a domain, for human consumption
@@ -109,13 +109,9 @@ public:
 
   uint32_t d_lastnotified; //!< Last serial number we notified our slaves of
 
-  //! configure how often this domain should be checked for changes (on disk)
-  void setCheckInterval(time_t seconds);
-
   shared_ptr<recordstorage_t > d_records;  //!< the actual records belonging to this domain
 private:
   time_t getCtime();
-
   time_t d_checkinterval;
 };
 
@@ -145,7 +141,7 @@ public:
   void setNotified(uint32_t id, uint32_t serial);
   bool startTransaction(const string &qname, int id);
   //  bool Bind2Backend::stopTransaction(const string &qname, int id);
-  bool feedRecord(const DNSResourceRecord &r);
+  bool feedRecord(const DNSResourceRecord &r, string *ordername=0);
   bool commitTransaction();
   bool abortTransaction();
   bool updateDNSSECOrderAndAuthAbsolute(uint32_t domain_id, const std::string& qname, const std::string& ordername, bool auth);
@@ -161,6 +157,7 @@ public:
   virtual bool deactivateDomainKey(const string& name, unsigned int id);
   virtual bool getTSIGKey(const string& name, string* algorithm, string* content);
   static void createDNSSECDB(const string& fname);
+  virtual bool doesDNSSEC();
   // end of DNSSEC 
 
 
@@ -190,13 +187,8 @@ private:
   {
   public:
     bool get(DNSResourceRecord &);
-    void reset()
-    {
-      d_records.reset();
-      qname.clear();
-      mustlog=false;
-    }
-
+    void reset();
+    
     handle();
 
     shared_ptr<recordstorage_t > d_records;
@@ -246,6 +238,7 @@ private:
   static string DLListRejectsHandler(const vector<string>&parts, Utility::pid_t ppid);
   static string DLReloadNowHandler(const vector<string>&parts, Utility::pid_t ppid);
   static void fixupAuth(shared_ptr<recordstorage_t> records);
+  static void doEmptyNonTerminals(shared_ptr<State> stage, int id, bool nsec3zone, NSEC3PARAMRecordContent ns3pr);
   void loadConfig(string *status=0);
   static void nukeZoneRecords(BB2DomainInfo *bbd);
 };

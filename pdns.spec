@@ -1,6 +1,6 @@
 BuildRoot: /tmp/pdns
 Name: pdns-static
-Version: 3.1
+Version: 3.3rc2
 Release: 1
 Summary: extremely powerful and versatile nameserver
 License: GPL
@@ -27,11 +27,13 @@ backend'.
 "/usr/sbin/pdns_server"
 "/usr/bin/pdns_control"
 "/usr/bin/zone2sql"
+"/usr/bin/zone2json"
 "/usr/bin/pdnssec"
 #"/usr/bin/zone2ldap"
 "/usr/man/man8/pdns_control.8"
 "/usr/man/man8/pdns_server.8"
 "/usr/man/man8/zone2sql.8"
+"/usr/man/man8/pdnssec.8"
 
 %dir "/etc/powerdns/"
 %config(noreplace) "/etc/powerdns/pdns.conf"
@@ -53,4 +55,15 @@ These are the tools
 
 %files -n pdns-tools
 %defattr(-,root,root)
+"/usr/bin/dnsbulktest"
 "/usr/bin/dnsreplay"
+"/usr/bin/dnsscan"
+"/usr/bin/dnsscope"
+"/usr/bin/dnstcpbench"
+"/usr/bin/dnswasher"
+"/usr/bin/nproxy"
+"/usr/bin/nsec3dig"
+"/usr/man/man8/dnsreplay.8"
+"/usr/man/man8/dnsscope.8"
+"/usr/man/man8/dnswasher.8"
+"/usr/man/man1/dnstcpbench.1"

@@ -1,31 +1,32 @@
 dnl intro
-AC_INIT(pdns/receiver.cc)
-AM_INIT_AUTOMAKE(pdns, 3.1)
+dnl The following lines may be patched by set-version-auth.
+AC_INIT([pdns], [3.3-rc2])
+AC_SUBST([DIST_HOST], [jenkins@autotest.powerdns.com])
+dnl End patch area.
+AC_CONFIG_SRCDIR([pdns/receiver.cc])
+AM_INIT_AUTOMAKE([foreign tar-ustar -Wno-portability])
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_CANONICAL_HOST
-AM_CONFIG_HEADER(config.h)
-AC_C_BIGENDIAN 
+LT_INIT
+AC_CONFIG_MACRO_DIR([m4])
+AC_CONFIG_HEADERS([config.h])
+AC_C_BIGENDIAN
 AC_PREREQ(2.52)
 : ${CXXFLAGS="-Wall -O2"}
 AC_PREFIX_DEFAULT(/usr/local)
 AC_PROG_CC
 AC_PROG_CXX
+AM_PROG_CC_C_O
 AC_PROG_YACC
 AM_PROG_LEX
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
-AC_PROG_LIBTOOL 
+AC_PROG_LIBTOOL
 AC_LANG_CPLUSPLUS
-
-BOOST_REQUIRE([1.34])
-BOOST_FOREACH
-#BOOST_FILESYSTEM([mt])
-BOOST_PROGRAM_OPTIONS([mt])
-BOOST_SERIALIZATION([mt])
-#BOOST_SYSTEM([mt])
 
 dnl Check for lua
 AC_MSG_CHECKING(if with lua)
-AC_ARG_WITH(lua, AC_HELP_STRING([--with-lua],[lua]), [WITH_LUA=$withval],[WITH_LUA=yes])
+AC_ARG_WITH(lua, AC_HELP_STRING([--with-lua],[use Lua]), [WITH_LUA=$withval],[WITH_LUA=yes])
 
 AC_MSG_RESULT($WITH_LUA)
 if test "$WITH_LUA" != "no"; then
@@ -52,7 +53,25 @@ if test "$WITH_LUA" != "no"; then
  AC_SUBST(LUA_CFLAGS)
  AC_SUBST(LUA_LIBS)
 fi
-         
+
+
+AM_CONDITIONAL([RELEASE_BUILD], [test "$PACKAGE_VERSION" != "git"])
+
+BOOST_REQUIRE([1.35])
+BOOST_FOREACH
+BOOST_PROGRAM_OPTIONS([mt])
+BOOST_SERIALIZATION([mt])
+AC_ARG_ENABLE(unit-tests, AC_HELP_STRING([--enable-unit-tests],[enable unit test building]), [enable_unit_tests=yes],[enable_unit_tests=no])
+
+if test x"$enable_unit_tests" = "xyes"; then
+   BOOST_TEST([mt])
+fi
+#BOOST_SYSTEM([mt])
+
+# detect pkg-config explicitly
+PKG_PROG_PKG_CONFIG
+
+
 dnl Allow user to require SQLite3
 AC_MSG_CHECKING(whether user requires sqlite3)
 AC_ARG_WITH(sqlite3, AC_HELP_STRING([--with-sqlite3],[include sqlite3 driver]), [WITH_SQLITE3=$withval],[WITH_SQLITE3=no])
@@ -76,7 +95,7 @@ AC_STRUCT_TM
 
 dnl Checks for library functions.
 AC_TYPE_SIGNAL
-AC_CHECK_FUNCS(gethostname gettimeofday mkdir mktime select socket strerror)
+AC_CHECK_FUNCS(gethostname gettimeofday mkdir mktime select socket strerror strcasestr)
 
 # Check for libdl
 
@@ -115,6 +134,7 @@ AC_SUBST(LIBCRYPT)
 DYNLINKFLAGS=""
 THREADFLAGS=""
 
+AM_CONDITIONAL([OS_MACOSX], false)
 case "$host_os" in
 solaris2.10)
 	AC_DEFINE(HAVE_IPV6,1,[If the host operating system understands IPv6])
@@ -122,14 +142,14 @@ solaris2.10)
 	CXXFLAGS="-D_REENTRANT $CXXFLAGS"
 	;;
 
-solaris2.8 | solaris2.9 ) 
+solaris2.8 | solaris2.9 )
 	AC_DEFINE(NEED_POSIX_TYPEDEF,,[If POSIX typedefs need to be defined])
 	AC_DEFINE(NEED_INET_NTOP_PROTO,,[If your OS is so broken that it needs an additional prototype])
 	AC_DEFINE(HAVE_IPV6,1,[If the host operating system understands IPv6])
 	LIBS="-lposix4 -lresolv -lnsl -lsocket -lpthread $LIBS"
 	CXXFLAGS="-D_REENTRANT $CXXFLAGS"
 	;;
-solaris2.6 | solaris2.7) 
+solaris2.6 | solaris2.7)
 	AC_DEFINE(NEED_POSIX_TYPEDEF,,[If POSIX typedefs need to be defined])
 	AC_DEFINE(NEED_INET_NTOP_PROTO,,[If your OS is so broken that it needs an additional prototype])
 	LIBS="-lposix4 -lresolv -lnsl -lsocket -lpthread $LIBS"
@@ -138,9 +158,16 @@ solaris2.6 | solaris2.7)
 linux*)
 	AC_DEFINE(HAVE_IPV6,1,[If the host operating system understands IPv6])
 	DYNLINKFLAGS="-rdynamic"
-	LDFLAGS="$LDFLAGS"
+	LDFLAGS="$LDFLAGS -lrt"
 	THREADFLAGS="-pthread"
 	CXXFLAGS="-D_GNU_SOURCE $CXXFLAGS"
+	;;
+darwin11* | darwin12*)
+	AC_DEFINE(HAVE_IPV6,1,[If the host operating system understands IPv6])
+	DYNLINKFLAGS="-rdynamic"
+	LDFLAGS="-pthread $LDFLAGS"
+	CXXFLAGS="-pthread $CXXFLAGS -D__APPLE_USE_RFC_3542"
+	AM_CONDITIONAL([OS_MACOSX], true)
 	;;
 *)
 	AC_DEFINE(HAVE_IPV6,1,[If the host operating system understands IPv6])
@@ -155,36 +182,90 @@ AC_SUBST(THREADFLAGS)
 AC_SUBST(DYNLINKFLAGS)
 
 AC_MSG_CHECKING(whether we will be doing verbose logging)
-AC_ARG_ENABLE(verbose-logging, 
- [  --enable-verbose-logging	Do verbose logging],enable_verbose_logging=yes ,enable_verbose_logging=no)
+AC_ARG_ENABLE(verbose-logging,
+ AC_HELP_STRING([--enable-verbose-logging],[do verbose logging]), [enable_verbose_logging=yes], [enable_verbose_logging=no])
 
-if test $enable_verbose_logging = yes; then AC_DEFINE(VERBOSELOG, 1, [If verbose logging should be enabled]) 
+if test $enable_verbose_logging = yes; then AC_DEFINE(VERBOSELOG, 1, [If verbose logging should be enabled])
 fi
 AC_MSG_RESULT($enable_verbose_logging)
 
+AC_MSG_CHECKING(whether we will try to link in system PolarSSL)
+AC_ARG_WITH([system-polarssl],
+ [AC_HELP_STRING([--without-system-polarssl], [do not use system PolarSSL])],
+ [system_polarssl=$withval],
+ [system_polarssl=yes])
+AC_MSG_RESULT($system_polarssl)
+AM_CONDITIONAL(HAVE_LIBPOLARSSL, false)
+if test x$system_polarssl = xyes; then
+ AC_MSG_CHECKING([PolarSSL version >= 1.1])
+ AC_COMPILE_IFELSE(
+    [AC_LANG_PROGRAM(
+        [[
+#include <polarssl/version.h>
+        ]],
+        [[
+#if POLARSSL_VERSION_NUMBER < 0x01010000
+#error invalid version
+#endif
+        ]]
+    )], [use_system_polarssl=yes], [use_system_polarssl=no])
+ AC_MSG_RESULT($use_system_polarssl)
+fi
+if test x$use_system_polarssl = xyes; then
+ AC_CHECK_LIB([polarssl], [sha1_hmac])
+fi
+
 AC_MSG_CHECKING(whether we will be linking in Botan 1.10)
-AC_ARG_ENABLE(botan1.10, 
- [  --enable-botan1.10	Use Botan 1.10],enable_botan110=yes, enable_botan110=no)
+AC_ARG_ENABLE(botan1.10,
+ AC_HELP_STRING([--enable-botan1.10],[use Botan 1.10]), [enable_botan110=yes], [enable_botan110=no])
 AC_MSG_RESULT($enable_botan110)
 AM_CONDITIONAL(BOTAN110,test x"$enable_botan110" = "xyes")
 
 AC_MSG_CHECKING(whether we will be linking in Botan 1.8)
-AC_ARG_ENABLE(botan1.8, 
- [  --enable-botan1.8	Use Botan 1.8],enable_botan18=yes, enable_botan18=no)
+AC_ARG_ENABLE(botan1.8,
+ AC_HELP_STRING([--enable-botan1.8],[use Botan 1.8]), [enable_botan18=yes], [enable_botan18=no])
 AC_MSG_RESULT($enable_botan18)
 AM_CONDITIONAL(BOTAN18,test x"$enable_botan18" = "xyes")
 
 AC_MSG_CHECKING(whether we will be linking in Crypto++)
-AC_ARG_ENABLE(cryptopp, 
- [  --enable-cryptopp	Use Crypto++],enable_cryptopp=yes, enable_cryptopp=no)
+AC_ARG_ENABLE(cryptopp,
+ AC_HELP_STRING([--enable-cryptopp],[use Crypto++]), [enable_cryptopp=yes], [enable_cryptopp=no])
 AC_MSG_RESULT($enable_cryptopp)
 AM_CONDITIONAL(CRYPTOPP,test x"$enable_cryptopp" = "xyes")
+if test "x$enable_botan110" = "xyes"
+then
+	PKG_CHECK_MODULES(BOTAN110, botan-1.10, HAVE_BOTAN110=yes, AC_MSG_ERROR([Could not find botan 1.10]))
+        AC_SUBST(BOTAN110_LIBS)
+        AC_SUBST(BOTAN110_CFLAGS)
+        AC_DEFINE(HAVE_BOTAN110,1,[If we have botan 1.10])
+fi
 
+if test "x$enable_botan18" = "xyes"
+then
+	PKG_CHECK_MODULES(BOTAN18, botan-1.8, HAVE_BOTAN18=yes, AC_MSG_ERROR([Could not find botan 1.8]))
+        AC_SUBST(BOTAN18_LIBS)
+        AC_SUBST(BOTAN18_CFLAGS)
+        AC_DEFINE(HAVE_BOTAN18,1,[If we have botan 1.8])
+fi
+
+AC_ARG_ENABLE(remotebackend_http, AC_HELP_STRING([--enable-remotebackend-http],[enable HTTP connector for remotebackend]),[enable_remotebackend_http=yes], [enable_remotebackend_http=no])
+AC_MSG_CHECKING(whether to enable http connector in remotebackend)
+AC_MSG_RESULT($enable_remotebackend_http)
+AM_CONDITIONAL(REMOTEBACKEND_HTTP,test x"$enable_remotebackend_http" = "xyes")
+if test "x$enable_remotebackend_http" = "xyes"
+then
+        PKG_CHECK_MODULES(LIBCURL, libcurl, HAVE_LIBCURL=yes, AC_MSG_ERROR([Could not find libcurl]))
+        REMOTEBACKEND_HTTP=yes
+        AC_SUBST(LIBCURL_LIBS)
+        AC_SUBST(LIBCURL_CFLAGS)
+        AC_DEFINE(HAVE_LIBCURL,1,[If we have libcurl])
+	AC_DEFINE(REMOTEBACKEND_HTTP,1,[If we want HTTP connector])
+        AC_SUBST(REMOTEBACKEND_HTTP)
+fi
 
 AC_MSG_CHECKING(whether we should build static binaries)
 
-AC_ARG_ENABLE(static-binaries, 
-	[  --enable-static-binaries	Build static binaries],
+AC_ARG_ENABLE(static-binaries, AC_HELP_STRING([--enable-static-binaries],[Build static binaries]),
      [case "${enableval}" in
        yes) static=true ;;
        no)  static=false ;;
@@ -194,32 +275,32 @@ AC_MSG_RESULT($static)
 
 AM_CONDITIONAL(ALLSTATIC, test x$static = xtrue)
 
-if test x$static = xtrue; 
-then 
+if test x$static = xtrue;
+then
 	LDFLAGS="-all-static $LDFLAGS"
 fi
 
 
 
-modules="gmysql geo"
-AC_ARG_WITH(modules, [  --with-modules Which backends to compile with ], 
+modules="gmysql geo random"
+AC_ARG_WITH(modules, AC_HELP_STRING([--with-modules],[which backends to compile with]),
 [
-        modules="$withval"  
+        modules="$withval"
 ])
 
 dynmodules="pipe"
-AC_ARG_WITH(dynmodules, [  --with-dynmodules Which backends to build for dynamic loading ], 
+AC_ARG_WITH(dynmodules, AC_HELP_STRING([--with-dynmodules],[which backends to build for dynamic loading]),
 [
-        dynmodules="$withval"  
+        dynmodules="$withval"
 ])
 
 
 
 AC_SUBST(socketdir)
 socketdir="/var/run"
-AC_ARG_WITH(socketdir, [  --with-socketdir Where the controlsocket lives ], 
+AC_ARG_WITH(socketdir, AC_HELP_STRING([--with-socketdir],[where the controlsocket lives]),
 [
-        socketdir="$withval"  
+        socketdir="$withval"
 ])
 
 AC_SUBST(moduledirs)
@@ -227,37 +308,40 @@ AC_SUBST(moduleobjects)
 AC_SUBST(modulelibs)
 
 AC_MSG_CHECKING(whether we will be building the server)
-AC_ARG_ENABLE(pdns-server, 
- [  --enable-pdns_server	If we should build the server],
-	enable_pdns_server=$enableval,
-	enable_pdns_server=yes)
+AC_ARG_ENABLE(pdns-server,
+ AC_HELP_STRING([--enable-pdns_server],[if we should build the server]),
+	[enable_pdns_server=$enableval],
+	[enable_pdns_server=yes])
 
 AC_MSG_RESULT($enable_pdns_server)
 
 if test x"$enable_pdns_server" = "xyes"
-then 
+then
 	programdescend=pdns
 fi
 
 AC_SUBST(programdescend)
 
-AC_ARG_ENABLE(gcc-skip-locking, 
- [ --enable-gcc-skip-locking	If we should forcefully skip gcc locking],
+AC_ARG_ENABLE(gcc-skip-locking,
+ AC_HELP_STRING([--enable-gcc-skip-locking],[if we should forcefully skip gcc locking]),
 	AC_DEFINE(GCC_SKIP_LOCKING,,[Skip gcc locking]),
  )
 
-AC_MSG_CHECKING(whether we will be building the recursor)
-AC_ARG_ENABLE(recursor, 
- [  --enable-recursor	If we should build the recursor],
-	enable_recursor=$enableval,
-	enable_recursor=no )
+AC_MSG_CHECKING(whether we will be building and installing the extra tools)
+AC_ARG_ENABLE(tools,
+ AC_HELP_STRING([--enable-tools],[if we should build+install the tools]),
+	enable_tools=$enableval,
+	enable_tools=no )
 
-AC_MSG_RESULT($enable_recursor)
-AM_CONDITIONAL(RECURSOR,test x"$enable_recursor" = "xyes")
+AC_MSG_RESULT($enable_tools)
+AM_CONDITIONAL(TOOLS,test x"$enable_tools" = "xyes")
 
 for a in $modules $dynmodules
 do
 	case "$a" in
+                oracle|goracle)
+                        needoracle=yes
+		;;
 		gmysql )
 			needmysql=yes
 		;;
@@ -266,9 +350,6 @@ do
 		;;
 		gpgsql )
 			needpgsql=yes
-		;;
-		gsqlite )
-			needsqlite=yes
 		;;
 		gsqlite3 )
 			needsqlite3=yes
@@ -315,26 +396,134 @@ do
 	esac
 done
 
+AM_CONDITIONAL(ORACLE,test x"$needoracle" = "xyes")
+if test "$needoracle"
+then
+	AC_ARG_WITH(oracle_includes, AC_HELP_STRING([--with-oracle-includes=<path>],[instantclient sdk include dir]))
+        AC_ARG_WITH(oracle_libs, AC_HELP_STRING([--with-oracle-libs=<path>],[instantclient oracle library dir]))
+
+        if test x"$with_oracle_includes" = "x"
+        then
+           # check possible locations
+           for p1 in /usr/include/oracle /usr/local/include/oracle
+           do
+             for p2 in $p1/*/client*
+             do
+if test -d "$p2"
+then
+with_oracle_includes=$p2
+fi
+             done
+           done
+        fi
+
+        if test x"$with_oracle_includes" = x && test "$ORACLE_HOME/rdbms/public" != "/rdbms/public"; then
+if test -d $ORACLE_HOME/rdbms/public; then
+  with_oracle_includes=$ORACLE_HOME/rdbms/public
+fi
+        fi
+
+        # test header
+        old_CXXFLAGS="$CXXFLAGS"
+        old_CFLAGS="$CFLAGS"
+        CXXFLAGS="$CXXFLAGS -I$with_oracle_includes"
+	CPPFLAGS="$CPPFLAGS -I$with_oracle_includes"
+        AC_CHECK_HEADER([oci.h], ORACLE_CFLAGS="-I$with_oracle_includes", AC_MSG_ERROR([Could not find oci.h]))
+	CXXFLAGS="$old_CXXFLAGS"
+	CPPFLAGS="$old_CPPFLAGS"
+        AC_SUBST([ORACLE_CFLAGS])
+        AC_SUBST([ORACLE_LIBS])
+
+	if test x"$with_oracle_libs" = "x"
+        then
+           # check possible locationse
+           for p1 in /usr/lib/oracle /usr/local/lib/oracle
+           do
+             for p2 in $p1/*/client*/lib
+             do
+if test -d "$p2"
+then
+with_oracle_libs=$p2
+fi
+             done
+           done
+        fi
+
+        if test x"$with_oracle_libs" = x && test "$ORACLE_HOME/lib" != "/lib"; then
+if test -d $ORACLE_HOME/lib; then
+  with_oracle_libs=$ORACLE_HOME/lib
+fi
+        fi
+
+        # we have to check for client9 as well...
+
+	# test -lclntsh
+	old_LDFLAGS="$LDFLAGS"
+	LDFLAGS="-L$with_oracle_libs -lnnz11 -locci"
+	AC_CHECK_LIB([clntsh],[OCIEnvInit],ORACLE_LIBS="-L$with_oracle_libs -lnnz11 -lclntsh -locci",
+           AC_CHECK_LIB([client9], [OCIEnvInit],ORACLE_LIBS="-L$with_oracle_libs -lclient9 -lclntsh9",AC_MSG_ERROR([Could not find client libraries])))
+        LDFLAGS="$old_LDFLAGS"
+fi
 
 if test "$needmysql"
 then
 	AC_ARG_WITH(mysql,
-	    [  --with-mysql=<path>     root directory path of MySQL installation],
+	    AC_HELP_STRING([--with-mysql=<path>],[root directory path of MySQL installation]),
 	    [MYSQL_lib_check="$withval/lib/mysql $with_mysql/lib"
-	MYSQL_inc_check="$withval/include/mysql"],
+             MYSQL_inc_check="$withval/include/mysql"
+             MYSQL_config_check="$withval/bin/mysql_config"],
 	    [MYSQL_lib_check="/usr/local/mysql/lib/mysql /usr/local/lib/mysql /opt/mysql/lib/mysql \
 		/usr/lib/mysql /usr/lib64/mysql /usr/local/mysql/lib /usr/local/lib /opt/mysql/lib /usr/lib \
-		/usr/sfw/lib/"
-	MYSQL_inc_check="/usr/local/mysql/include/mysql /usr/local/include/mysql \
+		/usr/sfw/lib/ /usr/lib/x86_64-linux-gnu/"
+	     MYSQL_inc_check="/usr/local/mysql/include/mysql /usr/local/include/mysql \
 		/opt/mysql/include/mysql /opt/mysql/include /usr/include/mysql /usr/sfw/include/mysql"])
-		AC_ARG_WITH(mysql-lib,
-	    [  --with-mysql-lib=<path> directory path of MySQL library installation],
-	    [MYSQL_lib_check="$withval/lib/mysql $withval/mysql $withval"])
-		AC_ARG_WITH(mysql-includes,
-	    [  --with-mysql-includes=<path>
-                         directory path of MySQL header installation],
-	    [MYSQL_inc_check="$withval/include/mysql $withval/mysql $withval"])
-		AC_MSG_CHECKING([for MySQL library directory])
+        AC_ARG_WITH(mysql-config,
+            AC_HELP_STRING([--with-mysql-config=<path>],[file path to mysql_config]),
+            [MYSQL_config_check=$withval])
+	AC_ARG_WITH(mysql-lib,
+	    AC_HELP_STRING([--with-mysql-lib=<path>],[directory path of MySQL library installation]),
+	    [MYSQL_lib_check="$withval/lib/mysql $withval/mysql $withval"
+             MYSQL_config_check="skip"])
+	AC_ARG_WITH(mysql-includes,
+	    AC_HELP_STRING([--with-mysql-includes=<path>],[directory path of MySQL header installation]),
+	    [MYSQL_inc_check="$withval/include/mysql $withval/mysql $withval"
+             MYSQL_config_check="skip"])
+
+        MYSQL_config=""
+
+        if test "x$MYSQL_config_check" != "xskip"; then
+           AC_MSG_CHECKING([for mysql_config])
+           if test "x$MYSQL_config_check" == "x"; then
+             # check if it's in path
+             for m in /bin /usr/bin /usr/local/bin /opt/csw/bin; do
+               if test -x $m/mysql_config; then
+                 MYSQL_config=$m/mysql_config
+                 break
+               fi
+             done
+
+             if test "x$MYSQL_config" == "x"; then
+                AC_MSG_RESULT([not found])
+             else
+                AC_MSG_RESULT([$MYSQL_config])
+             fi
+           else
+             if test -x $MYSQL_config_check; then
+               MYSQL_config="$MYSQL_config_check"
+               AC_MSG_RESULT([$MYSQL_config])
+             else
+               MYSQL_config=""
+               AC_MSG_ERROR([not found])
+             fi
+           fi
+        fi
+
+     if test "x$MYSQL_config" != "x"; then
+        # use this to configure everything
+        MYSQL_lib=`$MYSQL_config --libs`
+        MYSQL_inc=`$MYSQL_config --include`
+     else
+        AC_MSG_CHECKING([for MySQL library directory])
 	MYSQL_libdir=
 	for m in $MYSQL_lib_check; do
 	        if test -d "$m" && \
@@ -345,56 +534,56 @@ then
 	        fi
 	done
 		if test -z "$MYSQL_libdir"; then
-	        AC_MSG_ERROR([Didn't find the mysql library dir in '$MYSQL_lib_check'])
+	        AC_MSG_ERROR([Did not find the mysql library dir in '$MYSQL_lib_check'])
 	fi
 	case "$MYSQL_libdir" in
-                 /usr/lib ) MYSQL_lib="" ;;
-	  /* ) MYSQL_lib=-L$MYSQL_libdir; LDFLAGS="$MYSQL_lib $LDFLAGS";;
-	  * )  AC_MSG_ERROR([The MySQL library directory ($MYSQL_libdir) must be an absolute path.]) ;;
+	  /*) MYSQL_lib="-L$MYSQL_libdir -lmysqlclient"
+          ;;
+	  *)  AC_MSG_ERROR([The MySQL library directory ($MYSQL_libdir) must be an absolute path.])
+          ;;
 	esac
-	
-	AC_SUBST(MYSQL_lib)
-	
 	AC_MSG_RESULT([$MYSQL_libdir])
-		AC_MSG_CHECKING([for MySQL include directory])
-	MYSQL_incdir=
+        AC_SUBST(MYSQL_lib)
+	AC_MSG_CHECKING([for MySQL include directory])
+	MYSQL_inc=
 	for m in $MYSQL_inc_check; do
 	        if test -d "$m" && test -f "$m/mysql.h"
 	        then
-	                MYSQL_incdir=$m
+                        MYSQL_inc="$m"
 	                break
 	        fi
 	done
-		if test -z "$MYSQL_incdir"; then
-	        AC_MSG_ERROR([Didn't find the mysql include dir in '$MYSQL_inc_check'])
+		if test -z "$MYSQL_inc"; then
+	        AC_MSG_ERROR([Did not find the mysql include dir in '$MYSQL_inc_check'])
 	fi
 	
-	case "$MYSQL_incdir" in
-	  /* ) ;;
-	  * )  AC_MSG_ERROR([The MySQL include directory ($MYSQL_incdir) must be an absolute path.]) ;;
+	case "$MYSQL_inc" in
+	  /*) AC_MSG_RESULT($MYSQL_inc)
+          ;;
+	  *)  AC_MSG_ERROR([The MySQL include directory ($MYSQL_inc) must be an absolute path.])
+          ;;
 	esac
-	
-	AC_SUBST(MYSQL_incdir)
-	AC_MSG_RESULT([$MYSQL_incdir])
-#	LIBS="$LIBS -lmysqlclient"
+        MYSQL_inc="-I$MYSQL_inc"
+     fi
+	AC_SUBST(MYSQL_lib)
+	AC_SUBST(MYSQL_inc)
 fi
 
 
 
-if test "$needpgsql" 
+if test "$needpgsql"
 then
 	AC_ARG_WITH(pgsql,
-	    [  --with-pgsql=<path>     root directory path of PgSQL installation],
+	    AC_HELP_STRING([--with-pgsql=<path>],[root directory path of PgSQL installation]),
 	    [PGSQL_lib_check="$withval/lib/pgsql $with_pgsql/lib"
 	PGSQL_inc_check="$withval/include/pgsql"],
 	    [PGSQL_lib_check="/usr/local/pgsql/lib/pgsql /usr/local/lib/pgsql /opt/pgsql/lib/pgsql /usr/lib/pgsql /usr/local/pgsql/lib /usr/local/lib /opt/pgsql/lib /usr/lib /usr/lib64"
 	PGSQL_inc_check="/usr/local/pgsql/include/pgsql /usr/include /usr/local/include/postgresql/ /usr/local/include /opt/pgsql/include/pgsql /opt/pgsql/include /usr/include/pgsql/ /usr/include/postgresql"])
 		AC_ARG_WITH(pgsql-lib,
-	    [  --with-pgsql-lib=<path> directory path of PgSQL library installation],
+	    AC_HELP_STRING([--with-pgsql-lib=<path>],[directory path of PgSQL library installation]),
 	    [PGSQL_lib_check="$withval/lib/pgsql $withval/pgsql $withval"])
 		AC_ARG_WITH(pgsql-includes,
-	    [  --with-pgsql-includes=<path>
-                         directory path of PgSQL header installation],
+	    AC_HELP_STRING([--with-pgsql-includes=<path>],[directory path of PgSQL header installation]),
 	    [PGSQL_inc_check="$withval/include/pgsql $withval/pgsql $withval"])
 		AC_MSG_CHECKING([for PgSQL library directory])
 	PGSQL_libdir=
@@ -412,7 +601,7 @@ then
 	case "$PGSQL_libdir" in
 	  /usr/lib ) PGSQL_lib="" ;;
 	  /usr/lib64 ) PGSQL_lib="" ;;
-	  /* ) PGSQL_lib="-L$PGSQL_libdir -Wl,-rpath,$PGSQL_libdir" 
+	  /* ) PGSQL_lib="-L$PGSQL_libdir -Wl,-rpath,$PGSQL_libdir"
 	       LDFLAGS="$PGSQL_lib $LDFLAGS"
                ;;
 	  * )  AC_MSG_ERROR([The PgSQL library directory ($PGSQL_libdir) must be an absolute path.]) ;;
@@ -440,68 +629,7 @@ then
 	AC_MSG_RESULT([$PGSQL_incdir])
 fi
 
-if test "$needsqlite"
-then
-
-        AC_ARG_WITH(sqlite,
-            [  --with-sqlite=<path>     root directory path of SQLite installation],
-            [SQLITE_lib_check="$withval/lib/sqlite $with_sqlite/lib"
-        SQLITE_inc_check="$withval/include/sqlite"],
-            [SQLITE_lib_check="/usr/local/sqlite/lib/sqlite /usr/local/lib/sqlite /opt/pgsql/lib/sqlite /usr/lib/sqlite /usr/local/sqlite/lib /usr/local/lib /opt/sqlite/lib /usr/lib /usr/lib64"
-        SQLITE_inc_check="/usr/local/sqlite/include/sqlite /usr/local/include/sqlite/ /usr/local/include /opt/sqlite/include/sqlite /opt/sqlite/include /usr/include/ /usr/include/sqlite"])
-                AC_ARG_WITH(sqlite-lib,
-            [  --with-sqlite-lib=<path> directory path of SQLite library installation],
-            [SQLITE_lib_check="$withval/lib/sqlite $withval/sqlite $withval"])
-                AC_ARG_WITH(sqlite-includes,
-            [  --with-sqlite-includes=<path>
-                         directory path of SQLite header installation],
-            [SQLITE_inc_check="$withval/include/sqlite $withval/sqlite $withval"])
-                AC_MSG_CHECKING([for SQLite library directory])
-        SQLITE_libdir=
-        for m in $SQLITE_lib_check; do
-                if test -d "$m" && \
-                   (test -f "$m/libsqlite.so" || test -f "$m/libsqlite.a")
-                then
-                        SQLITE_libdir=$m
-                        break
-                fi
-        done
-                if test -z "$SQLITE_libdir"; then
-                AC_MSG_ERROR([Didn't find the sqlite library dir in '$SQLITE_lib_check'])
-        fi
-        case "$SQLITE_libdir" in
-          /usr/lib ) SQLITE_lib="" ;;
-          /usr/lib64 ) SQLITE_lib="" ;;
-          /* ) SQLITE_lib="-L$SQLITE_libdir -Wl,-rpath,$SQLITE_libdir"
-               LDFLAGS="$SQLITE_lib $LDFLAGS"
-               ;;
-          * )  AC_MSG_ERROR([The SQLite library directory ($SQLITE_libdir) must be an absolute path.]) ;;
-        esac
-
-        AC_SUBST(SQLITE_lib)
-        AC_MSG_RESULT([$SQLITE_libdir])
-                AC_MSG_CHECKING([for SQLite include directory])
-        SQLITE_incdir=
-        for m in $SQLITE_inc_check; do
-                if test -d "$m" && test -f "$m/sqlite.h"
-                then
-                        SQLITE_incdir=$m
-                        break
-                fi
-        done
-                if test -z "$SQLITE_incdir"; then
-                AC_MSG_ERROR([Didn't find the SQLite include dir in '$SQLITE_inc_check'])
-        fi
-        case "$SQLITE_incdir" in
-          /* ) ;;
-          * )  AC_MSG_ERROR([The SQLite include directory ($SQLITE_incdir) must be an absolute path.]) ;;
-        esac
-        AC_SUBST(SQLITE_incdir)
-        AC_MSG_RESULT([$SQLITE_incdir])
-
-#       LIBS="$LIBS -lsqlite"
-fi
-
+AM_CONDITIONAL(SQLITE3, test "$needsqlite3")
 if test "$needsqlite3"
 then
 	PKG_CHECK_MODULES(SQLITE3, $SQLITE3PC, HAVE_SQLITE3=yes, AC_MSG_ERROR([+Could not find sqlite3]))
@@ -517,24 +645,21 @@ then
         AC_SUBST(CDB_CFLAGS)
 fi
 
-AM_CONDITIONAL(SQLITE3, test "$needsqlite3")
-
-
 if test "$needunixodbc"
 then
         AC_ARG_WITH(unixodbc,
-            [  --with-unixodbc=<path>     root directory path of unixodbc installation],
+            AC_HELP_STRING([--with-unixodbc=<path>],[root directory path of unixodbc installation]),
             [UNIXODBC_lib_check="$withval/lib/unixodbc $with_unixodbc/lib $withval/lib"
              UNIXODBC_inc_check="$withval/include/unixodbc"],
             [UNIXODBC_lib_check="/usr/local/unixodbc/lib/unixodbc /usr/local/lib/unixodbc /usr/lib/unixodbc /usr/local/unixodbc/lib /usr/local/lib /opt/unixodbc/lib /usr/lib"
              UNIXODBC_inc_check="/usr/local/unixodbc/include/unixodbc /usr/local/include/unixodbc/ /usr/local/include /opt/unixodbc/include/unixodbc /opt/unixodbc/include /usr/include/ /usr/include/unixodbc"])
         AC_ARG_WITH(unixodbc-lib,
-            [  --with-unixodbc-lib=<path> directory path of unixodbc library installation],
+            AC_HELP_STRING([--with-unixodbc-lib=<path>],[directory path of unixodbc library installation]),
             [UNIXODBC_lib_check="$withval/lib/unixodbc $withval/unixodbc $withval"])
         AC_ARG_WITH(unixodbc-includes,
-            [  --with-unixodbc-includes=<path> directory path of unixodbc header installation],
+            AC_HELP_STRING([--with-unixodbc-includes=<path>],[directory path of unixodbc header installation]),
             [UNIXODBC_inc_check="$withval/include $withval/include/unixodbc $withval/unixodbc $withval"])
-        AC_MSG_CHECKING([for SQLite3 library directory])
+        AC_MSG_CHECKING([for unixodbc library directory])
         UNIXODBC_libdir=
         for m in $UNIXODBC_lib_check; do
                 if test -d "$m" && \
@@ -595,6 +720,9 @@ do
 		case "$host_os" in
 		freebsd*)
 			;;
+		darwin*)
+			modulelibs="$modulelibs -lresolv"
+			;;
 		*)
 			modulelibs="$modulelibs -lresolv -lnsl"
 			;;
@@ -617,8 +745,9 @@ modules/gmysqlbackend/Makefile modules/db2backend/Makefile \
 modules/geobackend/Makefile modules/opendbxbackend/Makefile \
 modules/pipebackend/Makefile modules/oraclebackend/Makefile \
 modules/xdbbackend/Makefile modules/godbcbackend/Makefile \
-modules/mongodbbackend/Makefile \
 modules/gpgsqlbackend/Makefile modules/ldapbackend/Makefile \
-modules/gsqlitebackend/Makefile modules/gsqlite3backend/Makefile \
+modules/gsqlite3backend/Makefile \
 modules/goraclebackend/Makefile modules/mydnsbackend/Makefile \
-modules/luabackend/Makefile modules/tinydnsbackend/Makefile)
+modules/luabackend/Makefile modules/tinydnsbackend/Makefile \
+modules/remotebackend/Makefile \
+modules/randombackend/Makefile)

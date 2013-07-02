@@ -1,6 +1,6 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2002  PowerDNS.COM BV
+    Copyright (C) 2002 - 2013  PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
@@ -34,7 +34,7 @@
 # include <strings.h>
 
 #endif // WIN32
-
+#include "iputils.hh"
 #include "ahuexception.hh"
 
 class SessionException: public AhuException
@@ -58,6 +58,7 @@ public:
   bool putLine(const string &s); //!< Write a line to the remote
   bool sendFile(int fd); //!< Send a file out
   int timeoutRead(int s,char *buf, size_t len);
+  string get(unsigned int bytes);
 
   Session(int s, struct sockaddr_in r); //!< Start a session on an existing socket, and inform this class of the remotes name
 
@@ -97,12 +98,12 @@ class Server
 public:
   Server(int p, const string &localaddress=""); //!< port on which to listen
   Session* accept(); //!< Call accept() in an endless loop to accept new connections
+  ComboAddress d_local;
 private:
   int s;
   int port;
   int backlog;
 
-  string d_localaddress;
 };
 
 class Exception

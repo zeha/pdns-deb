@@ -1,6 +1,6 @@
 //
 // File    : pdnsbackend.hh
-// Version : $Id: pipebackend.hh 1976 2011-02-06 11:11:34Z ahu $
+// Version : $Id$
 //
 
 #ifndef PIPEBACKEND_HH
@@ -9,34 +9,10 @@
 #include <string>
 #include <map>
 #include <sys/types.h>
-#include <regex.h>
 #include <boost/shared_ptr.hpp>
 
 #include "pdns/namespaces.hh"
-
-/** very small regex wrapper */
-class Regex
-{
-public:
-  /** constructor that accepts the expression to regex */
-  Regex(const string &expr)
-  {
-    if(regcomp(&d_preg, expr.c_str(), REG_ICASE|REG_NOSUB|REG_EXTENDED))
-      throw AhuException("Regular expression did not compile");
-  }
-  ~Regex()
-  {
-    regfree(&d_preg);
-  }
-  /** call this to find out if 'line' matches your expression */
-  bool match(const string &line)
-  {
-    return regexec(&d_preg,line.c_str(),0,0,0)==0;
-  }
-  
-private:
-  regex_t d_preg;
-};
+#include "pdns/misc.hh"
 
 
 /** The CoWrapper class wraps around a coprocess and restarts it if needed.
@@ -49,7 +25,7 @@ public:
   void send(const string &line);
   void receive(string &line);
 private:
-  CoProcess* d_cp;
+  CoRemote* d_cp;
   string d_command;
   void launch();
   int d_timeout;

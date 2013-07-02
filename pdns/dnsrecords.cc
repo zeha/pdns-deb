@@ -38,64 +38,13 @@ void ARecordContent::doRecordCheck(const DNSRecord& dr)
     throw MOADNSException("Wrong size for A record ("+lexical_cast<string>(dr.d_clen)+")");
 }
 
-class AAAARecordContent : public DNSRecordContent
-{
-public:
-  AAAARecordContent() : DNSRecordContent(ns_t_aaaa)
-  {}
-
-  static void report(void)
-  {
-    regist(1, ns_t_aaaa, &make, &make, "AAAA");
-  }
-
-  static DNSRecordContent* make(const DNSRecord &dr, PacketReader& pr) 
-  {
-    if(dr.d_clen!=16)
-      throw MOADNSException("Wrong size for AAAA record");
-
-    AAAARecordContent* ret=new AAAARecordContent();
-    pr.copyRecord((unsigned char*) &ret->d_ip6, 16);
-    return ret;
-  }
-
-  static DNSRecordContent* make(const string& zone) 
-  {
-    AAAARecordContent *ar=new AAAARecordContent();
-    if(Utility::inet_pton( AF_INET6, zone.c_str(), static_cast< void * >( ar->d_ip6 )) <= 0)
-      throw MOADNSException("Asked to encode '"+zone+"' as an IPv6 address, but does not parse");
-    return ar;
-  }
-
-  void toPacket(DNSPacketWriter& pw)
-  {
-    string blob(d_ip6, d_ip6+16);
-    pw.xfrBlob(blob);
-  }
-  
-  string getZoneRepresentation() const
-  {
-    struct sockaddr_in6 addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin6_family=AF_INET6;
-    memcpy(&addr.sin6_addr, d_ip6, 16);
-
-    char tmp[128];
-    tmp[0]=0;
-    Utility::inet_ntop(AF_INET6, (const char*)& addr.sin6_addr, tmp, sizeof(tmp));
-    return tmp;
-  }
-
-private:
-  unsigned char d_ip6[16];
-};
-
-
+boilerplate_conv(AAAA, ns_t_aaaa, conv.xfrIP6(d_ip6); );
 
 boilerplate_conv(NS, ns_t_ns, conv.xfrLabel(d_content, true));
 boilerplate_conv(PTR, ns_t_ptr, conv.xfrLabel(d_content, true));
 boilerplate_conv(CNAME, ns_t_cname, conv.xfrLabel(d_content, true));
-boilerplate_conv(MR, ns_t_mr, conv.xfrLabel(d_alias, false));
+boilerplate_conv(MR, ns_t_mr, conv.xfrLabel(d_alias, true));
+boilerplate_conv(MINFO, ns_t_minfo, conv.xfrLabel(d_rmailbx, true); conv.xfrLabel(d_emailbx, true));
 boilerplate_conv(TXT, ns_t_txt, conv.xfrText(d_text, true));
 boilerplate_conv(SPF, 99, conv.xfrText(d_text, true));
 boilerplate_conv(HINFO, ns_t_hinfo,  conv.xfrText(d_cpu);   conv.xfrText(d_host));
@@ -128,7 +77,7 @@ void OPTRecordContent::getData(vector<pair<uint16_t, string> >& options)
   }
 }
 
-boilerplate_conv(TSIG, ns_t_tsig, 
+boilerplate_conv(TSIG, ns_t_tsig,
         	 conv.xfrLabel(d_algoName);
         	 conv.xfr48BitInt(d_time);
         	 conv.xfr16BitInt(d_fudge);
@@ -137,9 +86,9 @@ boilerplate_conv(TSIG, ns_t_tsig,
         	 conv.xfrBlob(d_mac, size);
         	 conv.xfr16BitInt(d_origID);
         	 conv.xfr16BitInt(d_eRcode);
-        	 size=d_otherData.size();
-        	 conv.xfr16BitInt(size);
-        	 conv.xfrBlob(d_otherData, size);
+            	 size=d_otherData.size();
+        	 conv.xfr16BitInt(size); 
+        	 if (size>0) conv.xfrBlob(d_otherData, size);
         	 );
 
 MXRecordContent::MXRecordContent(uint16_t preference, const string& mxname) : DNSRecordContent(ns_t_mx), d_preference(preference), d_mxname(mxname)
@@ -156,13 +105,39 @@ boilerplate_conv(KX, ns_t_kx,
         	 conv.xfrLabel(d_exchanger, false);
         	 )
 
-boilerplate_conv(IPSECKEY, 45,  /* ns_t_ipsec */
-        	 conv.xfr8BitInt(d_preference);
-        	 conv.xfr8BitInt(d_gatewaytype);
-        	 conv.xfr8BitInt(d_algorithm);
-        	 conv.xfrLabel(d_gateway, false);
-        	 conv.xfrBlob(d_publickey);
-        	 )
+boilerplate_conv(IPSECKEY, ns_t_ipseckey,
+   conv.xfr8BitInt(d_preference);
+   conv.xfr8BitInt(d_gatewaytype);
+   conv.xfr8BitInt(d_algorithm);
+ 
+   // now we need to determine values
+   switch(d_gatewaytype) {
+   case 0: // NO KEY
+     break;
+   case 1: // IPv4 GW
+     conv.xfrIP(d_ip4);
+     break;
+   case 2: // IPv6 GW
+     conv.xfrIP6(d_ip6);
+     break;
+   case 3: // DNS label
+     conv.xfrLabel(d_gateway, false); 
+     break;
+   default:
+     throw MOADNSException("Parsing record content: invalid gateway type");
+   };
+
+   switch(d_algorithm) {
+   case 0:
+     break;
+   case 1:
+   case 2:
+     conv.xfrBlob(d_publickey);
+     break;
+   default:
+     throw MOADNSException("Parsing record content: invalid algorithm type");
+   }
+) 
 
 boilerplate_conv(DHCID, 49, 
         	 conv.xfrBlob(d_content);
@@ -188,10 +163,8 @@ SRVRecordContent::SRVRecordContent(uint16_t preference, uint16_t weight, uint16_
 
 boilerplate_conv(SRV, ns_t_srv, 
         	 conv.xfr16BitInt(d_preference);   conv.xfr16BitInt(d_weight);   conv.xfr16BitInt(d_port);
-        	 conv.xfrLabel(d_target);
+        	 conv.xfrLabel(d_target); 
         	 )
-
-
 
 SOARecordContent::SOARecordContent(const string& mname, const string& rname, const struct soatimes& st) 
   : DNSRecordContent(ns_t_soa), d_mname(mname), d_rname(rname)
@@ -218,11 +191,13 @@ boilerplate_conv(KEY, ns_t_key,
 
 boilerplate_conv(CERT, 37, 
         	 conv.xfr16BitInt(d_type); 
+                 if (d_type == 0) throw MOADNSException("CERT type 0 is reserved");
+
         	 conv.xfr16BitInt(d_tag); 
         	 conv.xfr8BitInt(d_algorithm); 
-        	 conv.xfrBlob(d_certificate);
-        	 )
-		 
+                 conv.xfrBlob(d_certificate);
+                 )
+
 boilerplate_conv(TLSA, 52, 
         	 conv.xfr8BitInt(d_certusage); 
         	 conv.xfr8BitInt(d_selector); 
@@ -275,6 +250,101 @@ boilerplate_conv(DNSKEY, 48,
         	 conv.xfrBlob(d_key);
         	 )
 DNSKEYRecordContent::DNSKEYRecordContent() : DNSRecordContent(48) {}
+
+boilerplate_conv(RKEY, 57, 
+        	 conv.xfr16BitInt(d_flags); 
+        	 conv.xfr8BitInt(d_protocol); 
+        	 conv.xfrBlob(d_key);
+        	 )
+RKEYRecordContent::RKEYRecordContent() : DNSRecordContent(57) {}
+
+/* EUI48 start */
+void EUI48RecordContent::report(void) 
+{
+    regist(1, ns_t_eui48, &make, &make, "EUI48");
+}
+DNSRecordContent* EUI48RecordContent::make(const DNSRecord &dr, PacketReader& pr)
+{
+    if(dr.d_clen!=6)
+      throw MOADNSException("Wrong size for EUI48 record");
+
+    EUI48RecordContent* ret=new EUI48RecordContent();
+    pr.copyRecord((uint8_t*) &ret->d_eui48, 6);
+    return ret;
+}
+DNSRecordContent* EUI48RecordContent::make(const string& zone)
+{
+    // try to parse
+    EUI48RecordContent *ret=new EUI48RecordContent();
+    // format is 6 hex bytes and dashes    
+    if (sscanf(zone.c_str(), "%2hhx-%2hhx-%2hhx-%2hhx-%2hhx-%2hhx", 
+           ret->d_eui48, ret->d_eui48+1, ret->d_eui48+2, 
+           ret->d_eui48+3, ret->d_eui48+4, ret->d_eui48+5) != 6) {
+       throw MOADNSException("Asked to encode '"+zone+"' as an EUI48 address, but does not parse");
+    }
+    return ret;
+}
+void EUI48RecordContent::toPacket(DNSPacketWriter& pw)
+{
+    string blob(d_eui48, d_eui48+6);
+    pw.xfrBlob(blob); 
+}
+string EUI48RecordContent::getZoneRepresentation() const
+{
+    char tmp[18]; 
+    snprintf(tmp,18,"%02x-%02x-%02x-%02x-%02x-%02x", 
+           d_eui48[0], d_eui48[1], d_eui48[2], 
+           d_eui48[3], d_eui48[4], d_eui48[5]);
+    return tmp;
+}
+
+/* EUI48 end */
+
+/* EUI64 start */
+
+void EUI64RecordContent::report(void)
+{
+    regist(1, ns_t_eui64, &make, &make, "EUI64");
+}
+DNSRecordContent* EUI64RecordContent::make(const DNSRecord &dr, PacketReader& pr)
+{
+    if(dr.d_clen!=8)
+      throw MOADNSException("Wrong size for EUI64 record");
+
+    EUI64RecordContent* ret=new EUI64RecordContent();
+    pr.copyRecord((uint8_t*) &ret->d_eui64, 8);
+    return ret;
+}
+DNSRecordContent* EUI64RecordContent::make(const string& zone)
+{
+    // try to parse
+    EUI64RecordContent *ret=new EUI64RecordContent();
+    // format is 8 hex bytes and dashes
+    if (sscanf(zone.c_str(), "%2hhx-%2hhx-%2hhx-%2hhx-%2hhx-%2hhx-%2hhx-%2hhx", 
+           ret->d_eui64, ret->d_eui64+1, ret->d_eui64+2,
+           ret->d_eui64+3, ret->d_eui64+4, ret->d_eui64+5,
+           ret->d_eui64+6, ret->d_eui64+7) != 8) {
+       throw MOADNSException("Asked to encode '"+zone+"' as an EUI64 address, but does not parse");
+    }
+    return ret;
+}
+void EUI64RecordContent::toPacket(DNSPacketWriter& pw)
+{
+    string blob(d_eui64, d_eui64+8);
+    pw.xfrBlob(blob);
+}
+string EUI64RecordContent::getZoneRepresentation() const
+{
+    char tmp[24]; 
+    snprintf(tmp,24,"%02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x",
+           d_eui64[0], d_eui64[1], d_eui64[2],
+           d_eui64[3], d_eui64[4], d_eui64[5],
+           d_eui64[6], d_eui64[7]);
+    return tmp;
+}
+
+/* EUI64 end */
+
 
 uint16_t DNSKEYRecordContent::getTag()
 {
@@ -339,7 +409,7 @@ void reportBasicTypes()
   SOARecordContent::report();
   SRVRecordContent::report();
   PTRRecordContent::report();
-  DNSRecordContent::regist(3, ns_t_txt, &TXTRecordContent::make, &TXTRecordContent::make, "TXT");
+  //DNSRecordContent::regist(3, ns_t_txt, &TXTRecordContent::make, &TXTRecordContent::make, "TXT");
   TXTRecordContent::report();
   DNSRecordContent::regist(1, QType::ANY, 0, 0, "ANY");
 }
@@ -354,6 +424,7 @@ void reportOtherTypes()
    RPRecordContent::report();
    KEYRecordContent::report();
    DNSKEYRecordContent::report();
+   RKEYRecordContent::report();
    RRSIGRecordContent::report();
    DSRecordContent::report();
    SSHFPRecordContent::report();
@@ -364,7 +435,11 @@ void reportOtherTypes()
    TLSARecordContent::report();
    DLVRecordContent::report();
    DNSRecordContent::regist(0xff, QType::TSIG, &TSIGRecordContent::make, &TSIGRecordContent::make, "TSIG");
+   //TSIGRecordContent::report();
    OPTRecordContent::report();
+   EUI48RecordContent::report();
+   EUI64RecordContent::report();
+   MINFORecordContent::report();
 }
 
 void reportFancyTypes()

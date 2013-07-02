@@ -71,32 +71,33 @@ public:
   DNSSECPrivateKey getKeyById(const std::string& zone, unsigned int id);
   bool addKey(const std::string& zname, bool keyOrZone, int algorithm=5, int bits=0, bool active=true);
   bool addKey(const std::string& zname, const DNSSECPrivateKey& dpk, bool active=true);
-  void removeKey(const std::string& zname, unsigned int id);
-  void activateKey(const std::string& zname, unsigned int id);
-  void deactivateKey(const std::string& zname, unsigned int id);
+  bool removeKey(const std::string& zname, unsigned int id);
+  bool activateKey(const std::string& zname, unsigned int id);
+  bool deactivateKey(const std::string& zname, unsigned int id);
 
-  bool secureZone(const std::string& fname, int algorithm);
+  bool secureZone(const std::string& fname, int algorithm, int size);
 
   bool getNSEC3PARAM(const std::string& zname, NSEC3PARAMRecordContent* n3p=0, bool* narrow=0);
-  void setNSEC3PARAM(const std::string& zname, const NSEC3PARAMRecordContent& n3p, const bool& narrow=false);
-  void unsetNSEC3PARAM(const std::string& zname);
+  bool setNSEC3PARAM(const std::string& zname, const NSEC3PARAMRecordContent& n3p, const bool& narrow=false);
+  bool unsetNSEC3PARAM(const std::string& zname);
+  void clearAllCaches();
   void clearCaches(const std::string& name);
-  bool getPreRRSIGs(DNSBackend& db, const std::string& signer, const std::string& qname, const QType& qtype, DNSPacketWriter::Place, vector<DNSResourceRecord>& rrsigs);
+  bool getPreRRSIGs(DNSBackend& db, const std::string& signer, const std::string& qname, const std::string& wildcardname, const QType& qtype, DNSPacketWriter::Place, vector<DNSResourceRecord>& rrsigs, uint32_t signTTL);
   bool isPresigned(const std::string& zname);
-  void setPresigned(const std::string& zname);
-  void unsetPresigned(const std::string& zname);
+  bool setPresigned(const std::string& zname);
+  bool unsetPresigned(const std::string& zname);
   
   bool TSIGGrantsAccess(const string& zone, const string& keyname, const string& algorithm);
   bool getTSIGForAccess(const string& zone, const string& master, string* keyname);
   
   void startTransaction()
   {
-	  (*d_keymetadb->backends.begin())->startTransaction("", -1);
+    (*d_keymetadb->backends.begin())->startTransaction("", -1);
   }
   
   void commitTransaction()
   {
-	  (*d_keymetadb->backends.begin())->commitTransaction();
+    (*d_keymetadb->backends.begin())->commitTransaction();
   }
   
   void getFromMeta(const std::string& zname, const std::string& key, std::string& value);
@@ -155,12 +156,14 @@ private:
 
   static keycache_t s_keycache;
   static metacache_t s_metacache;
-  static pthread_mutex_t s_metacachelock;
-  static pthread_mutex_t s_keycachelock;
+  static pthread_rwlock_t s_metacachelock;
+  static pthread_rwlock_t s_keycachelock;
   static AtomicCounter s_ops;
   static time_t s_last_prune;
 };
 
 class DNSPacket;
+uint32_t localtime_format_YYYYMMDDSS(time_t t, uint32_t seq);
 bool editSOA(DNSSECKeeper& dk, const string& qname, DNSPacket* dp);
+uint32_t calculateEditSoa(SOAData sd, const string& kind);
 #endif

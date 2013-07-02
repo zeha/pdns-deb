@@ -16,7 +16,7 @@
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-// $Id: gsqlbackend.cc 2583 2012-04-26 12:37:17Z peter $ 
+// $Id$ 
 #ifdef WIN32
 # pragma warning ( disable: 4786 )
 #endif // WIN32
@@ -34,6 +34,8 @@
 #include "pdns/ahuexception.hh"
 #include "pdns/logger.hh"
 #include "pdns/arguments.hh"
+#include "pdns/base32.hh"
+#include "pdns/dnssecinfra.hh"
 #include <boost/algorithm/string.hpp>
 #include <sstream>
 #include <boost/foreach.hpp>
@@ -273,21 +275,32 @@ GSQLBackend::GSQLBackend(const string &mode, const string &suffix)
   d_SuperMasterInfoQuery=getArg("supermaster-query");
   d_InsertSlaveZoneQuery=getArg("insert-slave-query");
   d_InsertRecordQuery=getArg("insert-record-query"+authswitch);
+  d_InsertEntQuery=getArg("insert-ent-query"+authswitch);
   d_UpdateSerialOfZoneQuery=getArg("update-serial-query");
   d_UpdateLastCheckofZoneQuery=getArg("update-lastcheck-query");
   d_ZoneLastChangeQuery=getArg("zone-lastchange-query");
   d_InfoOfAllMasterDomainsQuery=getArg("info-all-master-query");
   d_DeleteZoneQuery=getArg("delete-zone-query");
+  d_DeleteRRSet=getArg("delete-rrset-query");
   d_getAllDomainsQuery=getArg("get-all-domains-query");
+
+  d_removeEmptyNonTerminalsFromZoneQuery = getArg("remove-empty-non-terminals-from-zone-query");
+  d_insertEmptyNonTerminalQuery = getArg("insert-empty-non-terminal-query"+authswitch);
+  d_deleteEmptyNonTerminalQuery = getArg("delete-empty-non-terminal-query");
   
   if (d_dnssecQueries)
   {
+    d_InsertRecordOrderQuery=getArg("insert-record-order-query-auth");
+    d_InsertEntOrderQuery=getArg("insert-ent-order-query-auth");
+
     d_firstOrderQuery = getArg("get-order-first-query");
     d_beforeOrderQuery = getArg("get-order-before-query");
     d_afterOrderQuery = getArg("get-order-after-query");
     d_lastOrderQuery = getArg("get-order-last-query");
     d_setOrderAuthQuery = getArg("set-order-and-auth-query");
+    d_nullifyOrderNameAndUpdateAuthQuery = getArg("nullify-ordername-and-update-auth-query");
     d_nullifyOrderNameAndAuthQuery = getArg("nullify-ordername-and-auth-query");
+    d_setAuthOnDsRecordQuery = getArg("set-auth-on-ds-record-query");
     
     d_AddDomainKeyQuery = getArg("add-domain-key-query");
     d_ListDomainKeysQuery = getArg("list-domain-keys-query");
@@ -317,12 +330,30 @@ bool GSQLBackend::updateDNSSECOrderAndAuthAbsolute(uint32_t domain_id, const std
   if(!d_dnssecQueries)
     return false;
   char output[1024];
-  // ordername='%s',auth=%d where name='%s' and domain_id='%d'
-  
+
   snprintf(output, sizeof(output)-1, d_setOrderAuthQuery.c_str(), sqlEscape(ordername).c_str(), auth, sqlEscape(qname).c_str(), domain_id);
-//  cerr<<"sql: '"<<output<<"'\n";
-  
-  d_db->doCommand(output);
+  try {
+    d_db->doCommand(output);
+  }
+  catch(SSqlException &e) {
+    throw AhuException("GSQLBackend unable to update ordername/auth for domain_id "+itoa(domain_id)+": "+e.txtReason());
+  }
+  return true;
+}
+
+bool GSQLBackend::nullifyDNSSECOrderNameAndUpdateAuth(uint32_t domain_id, const std::string& qname, bool auth)
+{
+  if(!d_dnssecQueries)
+    return false;
+  char output[1024];
+
+  snprintf(output, sizeof(output)-1, d_nullifyOrderNameAndUpdateAuthQuery.c_str(), auth, domain_id, sqlEscape(qname).c_str());
+  try {
+    d_db->doCommand(output);
+  }
+  catch(SSqlException &e) {
+    throw AhuException("GSQLBackend unable to nullify ordername and update auth for domain_id "+itoa(domain_id)+": "+e.txtReason());
+  }
   return true;
 }
 
@@ -333,8 +364,76 @@ bool GSQLBackend::nullifyDNSSECOrderNameAndAuth(uint32_t domain_id, const std::s
   char output[1024];
 
   snprintf(output, sizeof(output)-1, d_nullifyOrderNameAndAuthQuery.c_str(), sqlEscape(qname).c_str(), sqlEscape(type).c_str(), domain_id);
-  d_db->doCommand(output);
+  try {
+    d_db->doCommand(output);
+  }
+  catch(SSqlException &e) {
+    throw AhuException("GSQLBackend unable to nullify ordername/auth for domain_id "+itoa(domain_id)+": "+e.txtReason());
+  }
   return true;
+}
+
+bool GSQLBackend::setDNSSECAuthOnDsRecord(uint32_t domain_id, const std::string& qname)
+{
+  if(!d_dnssecQueries)
+    return false;
+  char output[1024];
+
+  snprintf(output, sizeof(output)-1, d_setAuthOnDsRecordQuery.c_str(), domain_id, sqlEscape(qname).c_str());
+  try {
+    d_db->doCommand(output);
+  }
+  catch(SSqlException &e) {
+    throw AhuException("GSQLBackend unable to set auth on DS record "+qname+" for domain_id "+itoa(domain_id)+": "+e.txtReason());
+  }
+  return true;
+}
+
+bool GSQLBackend::updateEmptyNonTerminals(uint32_t domain_id, const std::string& zonename, set<string>& insert, set<string>& erase, bool remove)
+{
+  char output[1024];
+
+  if(remove) {
+    snprintf(output,sizeof(output)-1,d_removeEmptyNonTerminalsFromZoneQuery.c_str(), domain_id);
+    try {
+      d_db->doCommand(output);
+    }
+    catch (SSqlException &e) {
+      throw AhuException("GSQLBackend unable to delete empty non-terminal records from domain_id "+itoa(domain_id)+": "+e.txtReason());
+      return false;
+    }
+  }
+  else
+  {
+    BOOST_FOREACH(const string qname, erase) {
+      snprintf(output,sizeof(output)-1,d_deleteEmptyNonTerminalQuery.c_str(), domain_id, sqlEscape(qname).c_str());
+      try {
+        d_db->doCommand(output);
+      }
+      catch (SSqlException &e) {
+        throw AhuException("GSQLBackend unable to delete empty non-terminal rr "+qname+" from domain_id "+itoa(domain_id)+": "+e.txtReason());
+        return false;
+      }
+    }
+  }
+
+  BOOST_FOREACH(const string qname, insert) {
+    snprintf(output,sizeof(output)-1,d_insertEmptyNonTerminalQuery.c_str(), domain_id, sqlEscape(qname).c_str());
+    try {
+      d_db->doCommand(output);
+    }
+    catch (SSqlException &e) {
+      throw AhuException("GSQLBackend unable to insert empty non-terminal rr "+qname+" in domain_id "+itoa(domain_id)+": "+e.txtReason());
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool GSQLBackend::doesDNSSEC()
+{
+    return d_dnssecQueries;
 }
 
 bool GSQLBackend::getBeforeAndAfterNamesAbsolute(uint32_t id, const std::string& qname, std::string& unhashed, std::string& before, std::string& after)
@@ -342,47 +441,71 @@ bool GSQLBackend::getBeforeAndAfterNamesAbsolute(uint32_t id, const std::string&
   if(!d_dnssecQueries)
     return false;
   // cerr<<"gsql before/after called for id="<<id<<", qname='"<<qname<<"'"<<endl;
-  unhashed.clear(); before.clear(); after.clear();
+  after.clear();
   string lcqname=toLower(qname);
-  
+
   SSql::row_t row;
 
   char output[1024];
 
   snprintf(output, sizeof(output)-1, d_afterOrderQuery.c_str(), sqlEscape(lcqname).c_str(), id);
-  
-  d_db->doQuery(output);
+  try {
+    d_db->doQuery(output);
+  }
+  catch(SSqlException &e) {
+    throw AhuException("GSQLBackend unable to find before/after (after) for domain_id "+itoa(id)+": "+e.txtReason());
+  }
   while(d_db->getRow(row)) {
     after=row[0];
   }
 
   if(after.empty() && !lcqname.empty()) {
     snprintf(output, sizeof(output)-1, d_firstOrderQuery.c_str(), id);
-  
-    d_db->doQuery(output);
+    try {
+      d_db->doQuery(output);
+    }
+    catch(SSqlException &e) {
+      throw AhuException("GSQLBackend unable to find before/after (first) for domain_id "+itoa(id)+": "+e.txtReason());
+    }
     while(d_db->getRow(row)) {
       after=row[0];
     }
   }
 
-  snprintf(output, sizeof(output)-1, d_beforeOrderQuery.c_str(), sqlEscape(lcqname).c_str(), id);
-  d_db->doQuery(output);
-  while(d_db->getRow(row)) {
-    before=row[0];
-    unhashed=row[1];
-  }
-  
-  if(! unhashed.empty())
-  {
-    // cerr<<"unhashed="<<unhashed<<",before="<<before<<", after="<<after<<endl;
-    return true;
-  }
+  if (before.empty()) {
+    unhashed.clear();
 
-  snprintf(output, sizeof(output)-1, d_lastOrderQuery.c_str(), id);
-  d_db->doQuery(output);
-  while(d_db->getRow(row)) {
-    before=row[0];
-    unhashed=row[1];
+    snprintf(output, sizeof(output)-1, d_beforeOrderQuery.c_str(), sqlEscape(lcqname).c_str(), id);
+    try {
+      d_db->doQuery(output);
+    }
+    catch(SSqlException &e) {
+      throw AhuException("GSQLBackend unable to find before/after (before) for domain_id "+itoa(id)+": "+e.txtReason());
+    }
+    while(d_db->getRow(row)) {
+      before=row[0];
+      unhashed=row[1];
+    }
+
+    if(! unhashed.empty())
+    {
+      // cerr<<"unhashed="<<unhashed<<",before="<<before<<", after="<<after<<endl;
+      return true;
+    }
+
+    snprintf(output, sizeof(output)-1, d_lastOrderQuery.c_str(), id);
+    try {
+      d_db->doQuery(output);
+    }
+    catch(SSqlException &e) {
+      throw AhuException("GSQLBackend unable to find before/after (last) for domain_id "+itoa(id)+": "+e.txtReason());
+    }
+    while(d_db->getRow(row)) {
+      before=row[0];
+      unhashed=row[1];
+    }
+  } else {
+    before=lcqname;
   }
 
   return true;
@@ -616,7 +739,6 @@ void GSQLBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt_
       snprintf(output,sizeof(output)-1, format.c_str(),sqlEscape(lcqname).c_str(),domain_id);
     }
   }
-  DLOG(L<< "Query: '" << output << "'"<<endl);
 
   try {
     d_db->doQuery(output);
@@ -632,7 +754,7 @@ void GSQLBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt_
 }
 bool GSQLBackend::list(const string &target, int domain_id )
 {
-  DLOG(L<<"GSQLBackend constructing handle for list of domain id'"<<domain_id<<"'"<<endl);
+  DLOG(L<<"GSQLBackend constructing handle for list of domain id '"<<domain_id<<"'"<<endl);
 
   char output[1024];
   snprintf(output,sizeof(output)-1,d_listQuery.c_str(),domain_id);
@@ -692,7 +814,7 @@ void GSQLBackend::getAllDomains(vector<DomainInfo> *domains)
   DLOG(L<<"GSQLBackend retrieving all domains."<<endl);
 
   try {
-    d_db->doCommand(d_getAllDomainsQuery.c_str()); 
+    d_db->doQuery(d_getAllDomainsQuery.c_str()); 
   }
   catch (SSqlException &e) {
     throw AhuException("Database error trying to retrieve all domains:" + e.txtReason());
@@ -760,22 +882,76 @@ bool GSQLBackend::get(DNSResourceRecord &r)
   return false;
 }
 
-bool GSQLBackend::feedRecord(const DNSResourceRecord &r)
+bool GSQLBackend::replaceRRSet(uint32_t domain_id, const string& qname, const QType& qt, const vector<DNSResourceRecord>& rrset)
+{
+  string deleteQuery = (boost::format(d_DeleteRRSet) % domain_id % sqlEscape(qname) % sqlEscape(qt.getName())).str();
+  d_db->doCommand(deleteQuery);
+  BOOST_FOREACH(const DNSResourceRecord& rr, rrset) {
+    feedRecord(rr);
+  }
+  
+  return true;
+}
+
+bool GSQLBackend::feedRecord(const DNSResourceRecord &r, string *ordername)
 {
   string output;
   if(d_dnssecQueries) {
-    output = (boost::format(d_InsertRecordQuery) % sqlEscape(r.content) % r.ttl % r.priority % sqlEscape(r.qtype.getName()) % r.domain_id % toLower(sqlEscape(r.qname)) % (int)r.auth).str();
+    if(ordername)
+      output = (boost::format(d_InsertRecordOrderQuery) % sqlEscape(r.content) % r.ttl % r.priority % sqlEscape(r.qtype.getName()) % r.domain_id % toLower(sqlEscape(r.qname)) % sqlEscape(*ordername) % (int)r.auth).str();
+    else
+      output = (boost::format(d_InsertRecordQuery) % sqlEscape(r.content) % r.ttl % r.priority % sqlEscape(r.qtype.getName()) % r.domain_id % toLower(sqlEscape(r.qname)) % (int)r.auth).str();
   } else {
     output = (boost::format(d_InsertRecordQuery) % sqlEscape(r.content) % r.ttl % r.priority % sqlEscape(r.qtype.getName()) % r.domain_id % toLower(sqlEscape(r.qname))).str();
   }
-     
+
   try {
     d_db->doCommand(output.c_str());
   }
   catch (SSqlException &e) {
-    throw AhuException(e.txtReason());
+    throw AhuException("GSQLBackend unable to feed record: "+e.txtReason());
   }
   return true; // XXX FIXME this API should not return 'true' I think -ahu 
+}
+
+bool GSQLBackend::feedEnts(int domain_id, set<string>& nonterm)
+{
+  string output;
+  BOOST_FOREACH(const string qname, nonterm) {
+    output = (boost::format(d_InsertEntQuery) % domain_id % toLower(sqlEscape(qname))).str();
+
+    try {
+      d_db->doCommand(output.c_str());
+    }
+    catch (SSqlException &e) {
+      throw AhuException("GSQLBackend unable to feed empty non-terminal: "+e.txtReason());
+    }
+  }
+  return true;
+}
+
+bool GSQLBackend::feedEnts3(int domain_id, const string &domain, set<string> &nonterm, unsigned int times, const string &salt, bool narrow)
+{
+  if(!d_dnssecQueries)
+      return false;
+
+  string ordername, output;
+  BOOST_FOREACH(const string qname, nonterm) {
+    if(narrow) {
+      output = (boost::format(d_InsertEntQuery) % domain_id % toLower(sqlEscape(qname))).str();
+    } else {
+      ordername=toBase32Hex(hashQNameWithSalt(times, salt, qname));
+      output = (boost::format(d_InsertEntOrderQuery) % domain_id % toLower(sqlEscape(qname)) % toLower(sqlEscape(ordername))).str();
+    }
+
+    try {
+      d_db->doCommand(output.c_str());
+    }
+    catch (SSqlException &e) {
+      throw AhuException("GSQLBackend unable to feed empty non-terminal: "+e.txtReason());
+    }
+  }
+  return true;
 }
 
 bool GSQLBackend::startTransaction(const string &domain, int domain_id)

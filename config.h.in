@@ -18,6 +18,15 @@
 /* Define to 1 if you have <boost/program_options.hpp> */
 #undef HAVE_BOOST_PROGRAM_OPTIONS_HPP
 
+/* Define to 1 if you have <boost/test/unit_test.hpp> */
+#undef HAVE_BOOST_TEST_UNIT_TEST_HPP
+
+/* If we have botan 1.10 */
+#undef HAVE_BOTAN110
+
+/* If we have botan 1.8 */
+#undef HAVE_BOTAN18
+
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
@@ -54,6 +63,9 @@
 /* Define to 1 if you have the `crypt' library (-lcrypt). */
 #undef HAVE_LIBCRYPT
 
+/* If we have libcurl */
+#undef HAVE_LIBCURL
+
 /* Define to 1 if you have the `dl' library (-ldl). */
 #undef HAVE_LIBDL
 
@@ -65,6 +77,9 @@
 
 /* Have -lopendbx */
 #undef HAVE_LIBOPENDBX
+
+/* Define to 1 if you have the `polarssl' library (-lpolarssl). */
+#undef HAVE_LIBPOLARSSL
 
 /* Define to 1 if you have the <limits.h> header file. */
 #undef HAVE_LIMITS_H
@@ -101,6 +116,9 @@
 
 /* Define to 1 if you have the <stdlib.h> header file. */
 #undef HAVE_STDLIB_H
+
+/* Define to 1 if you have the `strcasestr' function. */
+#undef HAVE_STRCASESTR
 
 /* Define to 1 if you have the `strerror' function. */
 #undef HAVE_STRERROR
@@ -139,6 +157,9 @@
 /* If host OS misses RTLD_NOW */
 #undef NEED_RTLD_NOW
 
+/* Define to 1 if your C compiler doesn't accept -c and -o together. */
+#undef NO_MINUS_C_MINUS_O
+
 /* Name of package */
 #undef PACKAGE
 
@@ -159,6 +180,9 @@
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
+
+/* If we want HTTP connector */
+#undef REMOTEBACKEND_HTTP
 
 /* Define as the return type of signal handlers (`int' or `void'). */
 #undef RETSIGTYPE

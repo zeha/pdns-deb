@@ -25,6 +25,7 @@
 #include <signal.h>
 #include "misc.hh"
 #include "communicator.hh"
+#include "dnsseckeeper.hh"
 
 static bool s_pleasequit;
 
@@ -112,16 +113,21 @@ string DLUptimeHandler(const vector<string>&parts, Utility::pid_t ppid)
 string DLPurgeHandler(const vector<string>&parts, Utility::pid_t ppid)
 {
   extern PacketCache PC;  
+  DNSSECKeeper dk;
   ostringstream os;
   int ret=0;
 
   if(parts.size()>1) {
     for (vector<string>::const_iterator i=++parts.begin();i<parts.end();++i) {
       ret+=PC.purge(*i);
+      dk.clearCaches(*i);
     }
   }
-  else
+  else {
     ret=PC.purge();
+    dk.clearAllCaches();
+  }
+
   os<<ret;
   return os.str();
 }
@@ -211,10 +217,13 @@ string DLNotifyHostHandler(const vector<string>&parts, Utility::pid_t ppid)
   if(!::arg().mustDo("master"))
       return "PowerDNS not configured as master";
 
-  struct in_addr inp;
-  if(!Utility::inet_aton(parts[2].c_str(),&inp))
+  try {
+    ComboAddress ca(parts[2]);
+  } catch(...)
+  {
     return "Unable to convert '"+parts[2]+"' to an IP address";
-
+  }
+  
   L<<Logger::Warning<<"Notification request to host "<<parts[2]<<" for domain '"<<parts[1]<<"' received"<<endl;
   Communicator.notify(parts[1],parts[2]);
   return "Added to queue";

@@ -1,4 +1,4 @@
-// $Id: oraclebackend.hh 2326 2011-12-30 09:07:46Z ahu $
+// $Id$
 /*
  * Copyright (c) 2010-2011
  *
@@ -164,6 +164,7 @@ private:
   sb2       mResultPrevNameInd;
   char      mResultNextName[512];
   sb2       mResultNextNameInd;
+  bool      d_dnssecQueries;
 
   void Cleanup();
 

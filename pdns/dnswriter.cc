@@ -68,8 +68,8 @@ void DNSPacketWriter::startRecord(const string& name, uint16_t qtype, uint32_t t
   d_rollbackmarker=d_content.size();
 
   if(pdns_iequals(d_qname, d_recordqname)) {  // don't do the whole label compression thing if we *know* we can get away with "see question"
-    static char marker[2]={0xc0, 0x0c};
-    d_content.insert(d_content.end(), &marker[0], &marker[2]);
+    static unsigned char marker[2]={0xc0, 0x0c};
+    d_content.insert(d_content.end(), (const char *) &marker[0], (const char *) &marker[2]);
   }
   else {
     xfrLabel(d_recordqname, true);
@@ -237,6 +237,7 @@ void DNSPacketWriter::xfrLabel(const string& Label, bool compress)
 
     if(unescaped) {
       string part(label.c_str() + i -> first, i->second - i->first);
+      // FIXME: this relies on the semi-canonical escaped output from getLabelFromContent
       boost::replace_all(part, "\\.", ".");
       boost::replace_all(part, "\\032", " ");
       boost::replace_all(part, "\\\\", "\\"); 
@@ -250,7 +251,10 @@ void DNSPacketWriter::xfrLabel(const string& Label, bool compress)
       pos+=(part.size())+1;        		 
     }
     else {
-      d_record.push_back((char)(i->second - i->first));
+      char labelsize=(char)(i->second - i->first);
+      if(!labelsize) // empty label in the middle of name
+        throw MOADNSException("DNSPacketWriter::xfrLabel() found empty label in the middle of name");
+      d_record.push_back(labelsize);
       unsigned int len=d_record.size();
       d_record.resize(len + i->second - i->first);
       memcpy(((&*d_record.begin()) + len), label.c_str() + i-> first, i->second - i->first);

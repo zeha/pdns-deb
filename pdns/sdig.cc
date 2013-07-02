@@ -4,33 +4,66 @@
 #include "dnswriter.hh"
 #include "dnsrecords.hh"
 #include "statbag.hh"
+#include <boost/array.hpp>
 StatBag S;
 
 int main(int argc, char** argv)
 try
 {
   bool dnssec=false;
+  bool recurse=false;
+  bool tcp=false;
+  bool showflags=false;
 
   reportAllTypes();
 
   if(argc < 5) {
-    cerr<<"Syntax: sdig IP-address port question question-type [dnssec]\n";
+    cerr<<"Syntax: sdig IP-address port question question-type [dnssec|dnssec-tcp|recurse] [showflags]\n";
     exit(EXIT_FAILURE);
   }
 
+  // FIXME: turn recurse and dnssec into proper flags or something
   if(argc > 5 && strcmp(argv[5], "dnssec")==0)
   {
     dnssec=true;
+  }
+  
+  if(argc > 5 && strcmp(argv[5], "dnssec-tcp")==0)
+  {
+    dnssec=true;
+    tcp=true;
+  }
+
+  if(argc > 5 && strcmp(argv[5], "recurse")==0)
+  {
+    recurse=true;
+  }
+
+  if((argc > 5 && strcmp(argv[5], "showflags")==0) || (argc > 6 && strcmp(argv[6], "showflags")==0))
+  {
+    showflags=true;
   }
 
   vector<uint8_t> packet;
   
   DNSPacketWriter pw(packet, argv[3], DNSRecordContent::TypeToNumber(argv[4]));
 
-  if(dnssec)
+  if(dnssec || getenv("SDIGBUFSIZE"))
   {
-    pw.addOpt(2800, 0, EDNSOpts::DNSSECOK);
+    char *sbuf=getenv("SDIGBUFSIZE");
+    int bufsize;
+    if(sbuf)
+      bufsize=atoi(sbuf);
+    else
+      bufsize=2800;
+
+    pw.addOpt(bufsize, 0, dnssec ? EDNSOpts::DNSSECOK : 0);
     pw.commit();
+  }
+
+  if(recurse)
+  {
+    pw.getHeader()->rd=true;
   }
   //  pw.setRD(true);
  
@@ -53,13 +86,44 @@ try
   // pw.addOpt(5200, 0, 0);
   // pw.commit();
   
-  Socket sock(InterNetwork, Datagram);
-  ComboAddress dest(argv[1] + (*argv[1]=='@'), atoi(argv[2]));
-  sock.sendTo(string((char*)&*packet.begin(), (char*)&*packet.end()), dest);
-  
   string reply;
-  sock.recvFrom(reply, dest);
 
+  if(tcp) {
+    Socket sock(InterNetwork, Stream);
+    ComboAddress dest(argv[1] + (*argv[1]=='@'), atoi(argv[2]));
+    sock.connect(dest);
+    uint16_t len;
+    len = htons(packet.size());
+    if(sock.write((char *) &len, 2) != 2)
+      throw AhuException("tcp write failed");
+
+    sock.writen(string((char*)&*packet.begin(), (char*)&*packet.end()));
+    
+    if(sock.read((char *) &len, 2) != 2)
+      throw AhuException("tcp read failed");
+
+    len=ntohs(len);
+    char *creply = new char[len];
+    int n=0;
+    int numread;
+    while(n<len) {
+      numread=sock.read(creply+n, len-n);
+      if(numread<0)
+        throw AhuException("tcp read failed");
+      n+=numread;
+    }
+
+    reply=string(creply, len);
+    delete[] creply;
+  }
+  else //udp
+  {
+    Socket sock(InterNetwork, Datagram);
+    ComboAddress dest(argv[1] + (*argv[1]=='@'), atoi(argv[2]));
+    sock.sendTo(string((char*)&*packet.begin(), (char*)&*packet.end()), dest);
+    
+    sock.recvFrom(reply, dest);
+  }
   MOADNSParser mdp(reply);
   cout<<"Reply to question for qname='"<<mdp.d_qname<<"', qtype="<<DNSRecordContent::NumberToType(mdp.d_qtype)<<endl;
   cout<<"Rcode: "<<mdp.d_header.rcode<<", RD: "<<mdp.d_header.rd<<", QR: "<<mdp.d_header.qr;
@@ -67,7 +131,35 @@ try
 
   for(MOADNSParser::answers_t::const_iterator i=mdp.d_answers.begin(); i!=mdp.d_answers.end(); ++i) {          
     cout<<i->first.d_place-1<<"\t"<<i->first.d_label<<"\tIN\t"<<DNSRecordContent::NumberToType(i->first.d_type);
-    cout<<"\t"<<i->first.d_ttl<<"\t"<< i->first.d_content->getZoneRepresentation()<<"\n";
+    if(i->first.d_type == QType::RRSIG) 
+    {
+      string zoneRep = i->first.d_content->getZoneRepresentation();
+      vector<string> parts;
+      stringtok(parts, zoneRep);
+      cout<<"\t"<<i->first.d_ttl<<"\t"<< parts[0]<<" "<<parts[1]<<" "<<parts[2]<<" "<<parts[3]<<" [expiry] [inception] [keytag] "<<parts[7]<<" ...\n";
+    }
+    else if(!showflags && i->first.d_type == QType::NSEC3)
+    {
+      string zoneRep = i->first.d_content->getZoneRepresentation();
+      vector<string> parts;
+      stringtok(parts, zoneRep);
+      cout<<"\t"<<i->first.d_ttl<<"\t"<< parts[0]<<" [flags] "<<parts[2]<<" "<<parts[3]<<" "<<parts[4];
+      for(vector<string>::iterator iter = parts.begin()+5; iter != parts.end(); ++iter)
+        cout<<" "<<*iter;
+      cout<<"\n";
+    }
+    else if(i->first.d_type == QType::DNSKEY)
+    {
+      string zoneRep = i->first.d_content->getZoneRepresentation();
+      vector<string> parts;
+      stringtok(parts, zoneRep);
+      cout<<"\t"<<i->first.d_ttl<<"\t"<< parts[0]<<" "<<parts[1]<<" "<<parts[2]<<" ...\n";
+    }
+    else
+    {
+      cout<<"\t"<<i->first.d_ttl<<"\t"<< i->first.d_content->getZoneRepresentation()<<"\n";
+    }
+
   }
 
   EDNSOpts edo;

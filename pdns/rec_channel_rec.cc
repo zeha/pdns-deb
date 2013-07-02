@@ -56,20 +56,33 @@ optional<uint64_t> get(const string& name)
   return ret;
 }
 
-string getAllStats()
+map<string,string> getAllStatsMap()
 {
-  string ret;
+  map<string,string> ret;
+  
   pair<string, const uint32_t*> the32bits;
   pair<string, const uint64_t*> the64bits;
   pair<string, function< uint32_t() > >  the32bitmembers;
+  
   BOOST_FOREACH(the32bits, d_get32bitpointers) {
-    ret += the32bits.first + "\t" + lexical_cast<string>(*the32bits.second) + "\n";
+    ret.insert(make_pair(the32bits.first, lexical_cast<string>(*the32bits.second)));
   }
   BOOST_FOREACH(the64bits, d_get64bitpointers) {
-    ret += the64bits.first + "\t" + lexical_cast<string>(*the64bits.second) + "\n";
+    ret.insert(make_pair(the64bits.first, lexical_cast<string>(*the64bits.second)));
   }
   BOOST_FOREACH(the32bitmembers, d_get32bitmembers) {
-    ret += the32bitmembers.first + "\t" + lexical_cast<string>(the32bitmembers.second()) + "\n";
+    ret.insert(make_pair(the32bitmembers.first, lexical_cast<string>(the32bitmembers.second())));
+  }
+  return ret;
+}
+
+string getAllStats()
+{
+  typedef map<string, string> varmap_t;
+  varmap_t varmap = getAllStatsMap();
+  string ret;
+  BOOST_FOREACH(varmap_t::value_type& tup, varmap) {
+    ret += tup.first + "\t" + tup.second +"\n";
   }
   return ret;
 }
@@ -137,6 +150,33 @@ static uint64_t* pleaseDump(int fd)
   return new uint64_t(t_RC->doDump(fd) + dumpNegCache(t_sstorage->negcache, fd));
 }
 
+static uint64_t* pleaseDumpNSSpeeds(int fd)
+{
+  return new uint64_t(t_RC->doDumpNSSpeeds(fd));
+}
+
+template<typename T>
+string doDumpNSSpeeds(T begin, T end)
+{
+  T i=begin;
+  string fname;
+
+  if(i!=end)
+    fname=*i;
+
+  int fd=open(fname.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0660);
+  if(fd < 0)
+    return "Error opening dump file for writing: "+string(strerror(errno))+"\n";
+  uint64_t total = 0;
+  try {
+    total = broadcastAccFunction<uint64_t>(boost::bind(pleaseDumpNSSpeeds, fd));
+  }
+  catch(...){}
+
+  close(fd);
+  return "dumped "+lexical_cast<string>(total)+" records\n";
+}
+
 template<typename T>
 string doDumpCache(T begin, T end)
 {
@@ -179,11 +219,12 @@ string doDumpEDNSStatus(T begin, T end)
 
 uint64_t* pleaseWipeCache(const std::string& canon)
 {
-  return new uint64_t(t_RC->doWipeCache(canon));
+  // clear packet cache too
+  return new uint64_t(t_RC->doWipeCache(canon) + t_packetCache->doWipePacketCache(canon));
 }
 
 
-static uint64_t* pleaseWipeAndCountNegCache(const std::string& canon)
+uint64_t* pleaseWipeAndCountNegCache(const std::string& canon)
 {
   uint64_t res = t_sstorage->negcache.count(tie(canon));
   pair<SyncRes::negcache_t::iterator, SyncRes::negcache_t::iterator> range=t_sstorage->negcache.equal_range(tie(canon));
@@ -388,6 +429,7 @@ uint64_t doGetMallocated()
 RecursorControlParser::RecursorControlParser()
 {
   addGetStat("questions", &g_stats.qcounter);
+  addGetStat("ipv6-questions", &g_stats.ipv6qcounter);
   addGetStat("tcp-questions", &g_stats.tcpqcounter);
 
   addGetStat("cache-hits", doGetCacheHits);
@@ -544,6 +586,28 @@ string RecursorControlParser::getAnswer(const string& question, RecursorControlP
   string cmd=toLower(words[0]);
   vector<string>::const_iterator begin=words.begin()+1, end=words.end();
 
+  // should probably have a smart dispatcher here, like auth has
+  if(cmd=="help")
+    return
+"current-queries                  show currently active queries\n"
+"dump-cache <filename>            dump cache contents to the named file\n"
+"dump-edns[status] <filename>     dump EDNS status to the named file\n"
+"dump-nsspeeds <filename>         dump nsspeeds statistics to the named file\n"
+"get [key1] [key2] ..             get specific statistics\n"
+"get-all                          get all statistics\n"
+"get-parameter [key1] [key2] ..   get configuration parameters\n"
+"help                             get this list\n"
+"ping                             check that all threads are alive\n"
+"quit                             stop the recursor daemon\n"
+"quit-nicely                      stop the recursor daemon nicely\n"
+"reload-acls                      reload ACLS\n"
+"reload-lua-script [filename]     (re)load Lua script\n"
+"reload-zones                     reload all auth and forward zones\n"
+"trace-regex regex                emit resolution trace for matching queries\n"
+"top-remotes                      show top remotes\n"
+"unload-lua-script                unload Lua script\n"
+"wipe-cache domain0 [domain1] ..  wipe domain data from cache\n";
+
   if(cmd=="get-all")
     return getAllStats();
 
@@ -552,7 +616,6 @@ string RecursorControlParser::getAnswer(const string& question, RecursorControlP
   
   if(cmd=="get-parameter") 
     return doGetParameter(begin, end);
-
 
   if(cmd=="quit") {
     *command=&doExit;
@@ -570,12 +633,17 @@ string RecursorControlParser::getAnswer(const string& question, RecursorControlP
   if(cmd=="dump-ednsstatus" || cmd=="dump-edns") 
     return doDumpEDNSStatus(begin, end);
 
+  if(cmd=="dump-nsspeeds")
+    return doDumpNSSpeeds(begin, end);
 
-  if(cmd=="wipe-cache") 
+  if(cmd=="wipe-cache" || cmd=="flushname") 
     return doWipeCache(begin, end);
 
   if(cmd=="reload-lua-script") 
     return doQueueReloadLuaScript(begin, end);
+
+  if(cmd=="trace-regex") 
+    return doTraceRegex(begin, end);
 
   if(cmd=="unload-lua-script") {
     vector<string> empty;
@@ -615,5 +683,5 @@ string RecursorControlParser::getAnswer(const string& question, RecursorControlP
     return reloadAuthAndForwards();
   }
   
-  return "Unknown command '"+cmd+"'\n";
+  return "Unknown command '"+cmd+"', try 'help'\n";
 }

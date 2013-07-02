@@ -43,6 +43,7 @@
 #include <sys/types.h>
 #include "utility.hh"
 #include <boost/algorithm/string.hpp>
+#include "logger.hh"
 
 bool g_singleThreaded;
 
@@ -322,7 +323,7 @@ int waitForRWData(int fd, bool waitForRead, int seconds, int useconds)
   return ret;
 }
 
-// returns -1 in case if error, 0 if no data is available, 1 if there is. In the first two cases, errno is set
+// returns -1 in case of error, 0 if no data is available, 1 if there is. In the first two cases, errno is set
 int waitFor2Data(int fd1, int fd2, int seconds, int useconds, int*fd)
 {
   int ret;
@@ -559,6 +560,18 @@ void shuffle(vector<DNSResourceRecord>& rrs)
   // we don't shuffle the rest
 }
 
+static bool comparePlace(DNSResourceRecord a, DNSResourceRecord b)
+{
+  return (a.d_place < b.d_place);
+}
+
+// make sure rrs is sorted in d_place order to avoid surprises later
+// then shuffle the parts that desire shuffling
+void orderAndShuffle(vector<DNSResourceRecord>& rrs)
+{
+  std::stable_sort(rrs.begin(), rrs.end(), comparePlace);
+  shuffle(rrs);
+}
 
 void normalizeTV(struct timeval& tv)
 {
@@ -764,4 +777,10 @@ bool stringfgets(FILE* fp, std::string& line)
     line.append(buffer); 
   } while(!strchr(buffer, '\n'));
   return true;
+}
+
+Regex::Regex(const string &expr)
+{
+  if(regcomp(&d_preg, expr.c_str(), REG_ICASE|REG_NOSUB|REG_EXTENDED))
+    throw AhuException("Regular expression did not compile");
 }

@@ -1,12 +1,22 @@
 SUBDIRS=modules codedocs @programdescend@
-DIST_SUBDIRS=modules codedocs pdns
-EXTRA_DIST=TODO README HACKING INSTALL ChangeLog debian-pdns/* pdns.spec  \
+DIST_SUBDIRS=modules codedocs pdns pdns/ext/rapidjson
+EXTRA_DIST=TODO README HACKING INSTALL debian-pdns/* pdns.spec  \
 codedocs/Makefile codedocs/doxygen.conf contrib/powerdns.solaris.init.d \
-bootstrap
+contrib/systemd-pdns.service contrib/systemd-pdns-recursor.service \
+bootstrap build-scripts/semistaticg++ pdns/docs/dnstcpbench.1
 
-ACLOCAL_AMFLAGS = -I.
+ACLOCAL_AMFLAGS = -I m4
 
-man8_MANS=pdns/docs/pdns_control.8 pdns/docs/pdns_server.8 pdns/docs/zone2sql.8 
+man8_MANS=pdns/docs/pdns_control.8 pdns/docs/pdnssec.8 pdns/docs/pdns_server.8 \
+  pdns/docs/zone2ldap.8 pdns/docs/zone2sql.8
+
+if TOOLS
+  man8_MANS += pdns/docs/dnsreplay.8 pdns/docs/dnsscope.8 pdns/docs/dnswasher.8
+  man1_MANS = pdns/docs/dnstcpbench.1
+endif
+
+pdns/docs/dnstcpbench.1:
+	cd pdns/docs && $(MAKE) dnstcpbench.1
 
 install-exec-local: 
 	-@chmod +x pdns/pdns

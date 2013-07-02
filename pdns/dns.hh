@@ -16,7 +16,7 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
-// $Id: dns.hh 2589 2012-04-29 13:02:29Z peter $ 
+// $Id$ 
 /* (C) 2002 POWERDNS.COM BV */
 #ifndef DNS_HH
 #define DNS_HH
@@ -37,6 +37,8 @@ class DNSBackend;
 
 struct SOAData
 {
+  SOAData() : db(0), scopeMask(0) {};
+
   string qname;
   string nameserver;
   string hostmaster;
@@ -68,7 +70,7 @@ public:
 class DNSResourceRecord
 {
 public:
-  DNSResourceRecord() : qclass(1), priority(0), last_modified(0), d_place(ANSWER), auth(1), scopeMask(0) {};
+  DNSResourceRecord() : qclass(1), priority(0), signttl(0), last_modified(0), d_place(ANSWER), auth(1), scopeMask(0) {};
   ~DNSResourceRecord(){};
 
   // data
@@ -80,6 +82,7 @@ public:
   string content; //!< what this record points to. Example: 10.1.2.3
   uint16_t priority; //!< For qtypes that support a priority or preference (MX, SRV)
   uint32_t ttl; //!< Time To Live of this record
+  uint32_t signttl; //!< If non-zero, use this TTL as original TTL in the RRSIG
   int domain_id; //!< If a backend implements this, the domain_id of the zone this record is in
   time_t last_modified; //!< For autocalculating SOA serial numbers - the backend needs to fill this in
   enum Place {QUESTION=0, ANSWER=1, AUTHORITY=2, ADDITIONAL=3}; //!< Type describing the positioning of a DNSResourceRecord within, say, a DNSPacket
@@ -182,12 +185,15 @@ enum  {
         ns_t_sink = 40,         /* Kitchen sink (experimental) */
         ns_t_opt = 41,          /* EDNS0 option (meta-RR) */
         ns_t_ds = 43,           /* Delegation signer */
+        ns_t_ipseckey = 45,     /* IPSEC Key */
         ns_t_rrsig = 46,        /* Resoure Record signature */
         ns_t_nsec = 47,         /* Next Record */
         ns_t_dnskey = 48,       /* DNSKEY record */
         ns_t_nsec3 = 50,        /* Next Record v3 */
         ns_t_nsec3param = 51,   /* NSEC Parameters */
         ns_t_tlsa = 52,         /* TLSA */
+        ns_t_eui48 = 108,       /* EUI-48 */
+        ns_t_eui64 = 109,       /* EUI-64 */
         ns_t_tsig = 250,        /* Transaction signature. */
         ns_t_ixfr = 251,        /* Incremental zone transfer. */
         ns_t_axfr = 252,        /* Transfer zone of authority. */

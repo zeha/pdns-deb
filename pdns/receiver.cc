@@ -1,6 +1,6 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2002 - 2011  PowerDNS.COM BV
+    Copyright (C) 2002 - 2013  PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
@@ -62,6 +62,7 @@
 #include "utility.hh"
 #include "common_startup.hh"
 #include "dnsrecords.hh"
+#include "version.hh"
 
 
 time_t s_starttime;
@@ -117,7 +118,7 @@ static void takedown(int i)
   if(cpid) {
     L<<Logger::Error<<"Guardian is killed, taking down children with us"<<endl;
     kill(cpid,SIGKILL);
-    exit(1);
+    exit(0);
   }
 }
 
@@ -369,8 +370,6 @@ static void loadModules()
   }
 }
 
-
-
 #ifdef __linux__
 #include <execinfo.h>
 static void tbhandler(int num)
@@ -396,7 +395,8 @@ static void tbhandler(int num)
 
 //! The main function of pdns, the pdns process
 int main(int argc, char **argv)
-{ 
+{
+  versionSetProduct("Authoritative Server");
   reportAllTypes(); // init MOADNSParser
 
   s_programname="pdns";
@@ -409,14 +409,22 @@ int main(int argc, char **argv)
   signal(SIGILL,tbhandler);
 #endif
 
+#if __GNUC__ >= 3
+  std::ios_base::sync_with_stdio(false);
+#endif
 
   L.toConsole(Logger::Warning);
   try {
     declareArguments();
     UNIX_declareArguments();
-      
+
     ::arg().laxParse(argc,argv); // do a lax parse
     
+    if(::arg().mustDo("version")) {
+      showProductVersion();
+      exit(99);
+    }
+
     if(::arg()["config-name"]!="") 
       s_programname+="-"+::arg()["config-name"];
     
@@ -455,17 +463,19 @@ int main(int argc, char **argv)
       cerr<<"Um, we did get here!"<<endl;
     }
 
-    if(::arg().mustDo("version")) {
-      cerr<<"Version: "VERSION", compiled on "<<__DATE__", "__TIME__;
-#ifdef __GNUC__ 
-      cerr<<" with gcc version "<<__VERSION__;
-#endif
-      cout<<endl;
-      exit(99);
-    }
     
     // we really need to do work - either standalone or as an instance
-    
+
+#ifdef __linux__
+    if(!::arg().mustDo("traceback-handler")) {
+      L<<Logger::Warning<<"Disabling traceback handler"<<endl;
+      signal(SIGSEGV,SIG_DFL);
+      signal(SIGFPE,SIG_DFL);
+      signal(SIGABRT,SIG_DFL);
+      signal(SIGILL,SIG_DFL);
+    }
+#endif
+
     seedRandom(::arg()["entropy-source"]);
     
     loadModules();
@@ -514,12 +524,6 @@ int main(int argc, char **argv)
         daemonize();
     }
 
-    if(::arg()["server-id"].empty()) {
-      char tmp[128];
-      gethostname(tmp, sizeof(tmp)-1);
-      ::arg().set("server-id")=tmp;
-    }
-
     if(isGuarded(argv)) {
       L<<Logger::Warning<<"This is a guarded instance of pdns"<<endl;
       dl=new DynListener; // listens on stdin 
@@ -557,6 +561,13 @@ int main(int argc, char **argv)
     if(!::arg().mustDo("no-config"))
       ::arg().file(configname.c_str());
     ::arg().parse(argc,argv);
+
+    if(::arg()["server-id"].empty()) {
+      char tmp[128];
+      gethostname(tmp, sizeof(tmp)-1);
+      ::arg().set("server-id")=tmp;
+    }
+
     UeberBackend::go();
     N=new UDPNameserver; // this fails when we are not root, throws exception
     
@@ -570,20 +581,10 @@ int main(int argc, char **argv)
   
   declareStats();
   DLOG(L<<Logger::Warning<<"Verbose logging in effect"<<endl);
-  
-  L<<Logger::Warning<<"PowerDNS "<<VERSION<<" (C) 2001-2012 PowerDNS.COM BV ("<<__DATE__", "__TIME__;
-#ifdef __GNUC__
-  L<<", gcc "__VERSION__;
-#endif // add other compilers here
-  L<<") starting up"<<endl;
 
-  L<<Logger::Warning<<"PowerDNS comes with ABSOLUTELY NO WARRANTY. "
-    "This is free software, and you are welcome to redistribute it "
-    "according to the terms of the GPL version 2."<<endl;
-
+  showProductVersion();
 
   try {
-
     mainthread();
   }
   catch(AhuException &AE) {

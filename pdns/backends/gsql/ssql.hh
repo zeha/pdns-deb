@@ -1,6 +1,6 @@
 /* Copyright 2001 Netherlabs BV, bert.hubert@netherlabs.nl. See LICENSE 
    for more information.
-   $Id: ssql.hh 1976 2011-02-06 11:11:34Z ahu $  */
+   $Id$  */
 #ifndef SSQL_HH
 #define SSQL_HH
 

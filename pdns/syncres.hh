@@ -134,14 +134,17 @@ public:
 
     if(d_needinit) {
       d_last=now;
+      d_lastget=now;
       d_needinit=false;
+      d_val = val;
     }
+    else {
+      float diff= makeFloat(d_last - now);
 
-    float diff= makeFloat(d_last - now);
-
-    d_last=now;
-    double factor=exp(diff)/2.0; // might be '0.5', or 0.0001
-    d_val=(float)((1-factor)*val+ (float)factor*d_val); 
+      d_last=now;
+      double factor=exp(diff)/2.0; // might be '0.5', or 0.0001
+      d_val=(float)((1-factor)*val+ (float)factor*d_val); 
+    }
   }
 
   double get(struct timeval* tv)
@@ -151,6 +154,11 @@ public:
     d_lastget=now;
     float factor=exp(diff/60.0f); // is 1.0 or less
     return d_val*=factor;
+  }
+
+  double peek(void)
+  {
+    return d_val;
   }
 
   bool stale(time_t limit) const
@@ -169,18 +177,31 @@ private:
 class SyncRes : public boost::noncopyable
 {
 public:
+  enum LogMode { LogNone, Log, Store}; 
+
   explicit SyncRes(const struct timeval& now);
 
   int beginResolve(const string &qname, const QType &qtype, uint16_t qclass, vector<DNSResourceRecord>&ret);
   void setId(int id)
   {
-    if(s_log)
+    if(doLog())
       d_prefix="["+itoa(id)+"] ";
   }
-  static void setLog(bool log)
+  static void setDefaultLogMode(LogMode lm)
   {
-    s_log=log;
+    s_lm = lm;
   }
+ 
+  void setLogMode(LogMode lm) 
+  {
+    d_lm = lm;
+  }
+
+  bool doLog()
+  {
+    return d_lm != LogNone; 
+  }
+
   void setCacheOnly(bool state=true)
   {
     d_cacheonly=state;
@@ -193,6 +214,11 @@ public:
   void setDoEDNS0(bool state=true)
   {
     d_doEDNS0=state;
+  }
+
+  string getTrace() const
+  {
+    return d_trace.str();
   }
 
   int asyncresolveWrapper(const ComboAddress& ip, const string& domain, int type, bool doTCP, bool sendRDQuery, struct timeval* now, LWResult* res);
@@ -283,8 +309,7 @@ public:
     ComboAddress d_best;
   };
 
-  typedef map<string, DecayingEwmaCollection, CIStringCompare> nsspeeds_t;
-  
+  typedef map<string, DecayingEwmaCollection, CIStringCompare> nsspeeds_t;  
 
   struct EDNSStatus
   {
@@ -295,8 +320,6 @@ public:
   };
 
   typedef map<ComboAddress, EDNSStatus> ednsstatus_t;
-
-  
 
   static bool s_noEDNSPing;
   static bool s_noEDNS;
@@ -333,7 +356,8 @@ public:
   static unsigned int s_packetcacheservfailttl;
   static bool s_nopacketcache;
   static string s_serverID;
-
+  
+  
   struct StaticStorage {
     negcache_t negcache;    
     nsspeeds_t nsSpeeds;
@@ -358,14 +382,16 @@ private:
 
   inline vector<string> shuffleInSpeedOrder(set<string, CIStringCompare> &nameservers, const string &prefix);
   bool moreSpecificThan(const string& a, const string &b);
-  vector<ComboAddress> getAs(const string &qname, int depth, set<GetBestNSAnswer>& beenthere);
+  vector<ComboAddress> getAddrs(const string &qname, int depth, set<GetBestNSAnswer>& beenthere);
 
 private:
+  ostringstream d_trace;
   string d_prefix;
-  static bool s_log;
   bool d_cacheonly;
   bool d_nocache;
   bool d_doEDNS0;
+  static LogMode s_lm;
+  LogMode d_lm;
 
   struct GetBestNSAnswer
   {
@@ -460,6 +486,7 @@ struct RecursorStats
   uint64_t answers0_1, answers1_10, answers10_100, answers100_1000, answersSlow;
   uint64_t avgLatencyUsec;
   uint64_t qcounter;
+  uint64_t ipv6qcounter;
   uint64_t tcpqcounter;
   uint64_t unauthorizedUDP;
   uint64_t unauthorizedTCP;
@@ -522,11 +549,10 @@ struct RemoteKeeper
 };
 extern __thread RemoteKeeper* t_remotes;
 string doQueueReloadLuaScript(vector<string>::const_iterator begin, vector<string>::const_iterator end);
+string doTraceRegex(vector<string>::const_iterator begin, vector<string>::const_iterator end);
 void parseACLs();
 extern RecursorStats g_stats;
 extern unsigned int g_numThreads;
-
-
 
 std::string reloadAuthAndForwards();
 ComboAddress parseIPAndPort(const std::string& input, uint16_t port);
@@ -551,5 +577,6 @@ uint64_t* pleaseGetThrottleSize();
 uint64_t* pleaseGetPacketCacheHits();
 uint64_t* pleaseGetPacketCacheSize();
 uint64_t* pleaseWipeCache(const std::string& canon);
+uint64_t* pleaseWipeAndCountNegCache(const std::string& canon);
 
 #endif

@@ -21,6 +21,7 @@
 #include "bind-dnssec.schema.sqlite3.sql.h"
 #include <boost/foreach.hpp>
 #include "config.h"
+#include "pdns/arguments.hh"
 
 #ifndef HAVE_SQLITE3
 void Bind2Backend::setupDNSSEC()
@@ -31,6 +32,9 @@ void Bind2Backend::setupDNSSEC()
 
 void Bind2Backend::createDNSSECDB(const string& fname)
 {}
+
+bool Bind2Backend::doesDNSSEC()
+{ return false; }
 
 bool Bind2Backend::getNSEC3PARAM(const std::string& zname, NSEC3PARAMRecordContent* ns3p)
 { return false; }
@@ -73,6 +77,8 @@ void Bind2Backend::setupDNSSEC()
     // this error is meant to kill the server dead - it makes no sense to continue..
     throw runtime_error("Error opening DNSSEC database in BIND backend: "+se.txtReason());
   }
+
+  d_dnssecdb->setLog(::arg().mustDo("query-logging"));
 }
 
 void Bind2Backend::createDNSSECDB(const string& fname)
@@ -89,6 +95,10 @@ void Bind2Backend::createDNSSECDB(const string& fname)
   }
 }
 
+bool Bind2Backend::doesDNSSEC()
+{
+  return true;
+}
 
 bool Bind2Backend::getNSEC3PARAM(const std::string& zname, NSEC3PARAMRecordContent* ns3p)
 {

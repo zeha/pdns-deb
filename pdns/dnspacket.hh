@@ -1,6 +1,6 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2002 - 2011  PowerDNS.COM BV
+    Copyright (C) 2002 - 2012  PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify it
     under the terms of the GNU General Public License version 2 as published
@@ -93,6 +93,8 @@ public:
   }
   uint16_t getRemotePort() const;
 
+  boost::optional<ComboAddress> d_anyLocal;
+
   Utility::sock_t getSocket() const
   {
     return d_socket;
@@ -121,7 +123,7 @@ public:
 
   DTime d_dt; //!< the time this packet was created. replyPacket() copies this in for you, so d_dt becomes the time spent processing the question+answer
   void wrapup();  // writes out queued rrs, and generates the binary packet. also shuffles. also rectifies dnsheader 'd', and copies it to the stringbuffer
-  void spoofQuestion(const string &qd); //!< paste in the exact right case of the question. Useful for PacketCache
+  void spoofQuestion(const DNSPacket *qd); //!< paste in the exact right case of the question. Useful for PacketCache
   unsigned int getMinTTL(); //!< returns lowest TTL of any record in the packet
 
   vector<DNSResourceRecord*> getAPRecords(); //!< get a vector with DNSResourceRecords that need additional processing
@@ -136,6 +138,7 @@ public:
 
   bool couldBeCached(); //!< returns 0 if this query should bypass the packet cache
   bool hasEDNSSubnet();
+  bool hasEDNS();
   //////// DATA !
 
   ComboAddress d_remote;
@@ -169,6 +172,7 @@ private:
   string d_ednsping;
   bool d_wantsnsid;
   bool d_haveednssubnet;
+  bool d_haveednssection;
   EDNSSubnetOpts d_eso;
   string d_tsigsecret;
   string d_tsigkeyname;
