@@ -15,7 +15,7 @@ fi
 if [ -z "$PDNSDIR" ]; then
   PDNSDIR=/etc/powerdns/pdns.d
 fi
-PDNSLOCAL=$PDNSDIR/pdns.local
+PDNSLOCAL=$PDNSDIR/pdns.local.conf
 
 # Temporary files
 PDNSCONFTEMP=`mktemp`
@@ -35,7 +35,7 @@ case "$1" in
 
     # Fill the temporary files with config items.
     cat /usr/share/pdns-server/pdns.conf > $PDNSCONFTEMP
-    cat /usr/share/pdns-server/pdns.local > $PDNSLOCALTEMP
+    cat /usr/share/pdns-server/pdns.local.conf > $PDNSLOCALTEMP
     cat /usr/share/pdns-server/pdns > $PDNSDEFAULTTEMP
 
     # Do we listen on a specified address
@@ -70,7 +70,7 @@ case "$1" in
     fi
     
     # If we still have the default config, make sure bindbackend.conf exists
-    PDNSBIND="/etc/powerdns/pdns.d/pdns.simplebind"
+    PDNSBIND="/etc/powerdns/pdns.d/pdns.simplebind.conf"
     PDNSBINDBACKENDCONF="/etc/powerdns/bindbackend.conf"
     if [ -e "$PDNSBIND" ]; then
       if grep -q "^bind-config=$PDNSBINDBACKENDCONF$" $PDNSBIND; then

@@ -15,10 +15,10 @@ fi
 
 # Remove configuration file, dbconfig-common might not be able to do so.
 if [ "$1" = "purge" ]; then
-	rm -f /etc/powerdns/pdns.d/pdns.local.gpgsql
+	rm -f /etc/powerdns/pdns.d/pdns.local.gpgsql.conf
 	if which ucf > /dev/null 2>&1; then
-		ucf --purge /etc/powerdns/pdns.d/pdns.local.gpgsql
-		ucfr --purge pdns-backend-pgsql /etc/powerdns/pdns.d/pdns.local.gpgsql
+		ucf --purge /etc/powerdns/pdns.d/pdns.local.gpgsql.conf
+		ucfr --purge pdns-backend-pgsql /etc/powerdns/pdns.d/pdns.local.gpgsql.conf
 	fi
 fi
 

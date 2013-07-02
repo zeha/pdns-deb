@@ -10,12 +10,14 @@ with several backends, including MySQL, PostgreSQL, LDAP etc.
 
 The configuration for PowerDNS is separated in different files. In
 /etc/powerdns/pdns.conf are the default settings and in
-/etc/powerdns/pdns.d/pdns.local are the user changes. The configuration for
-specific backends can go into /etc/powerdns/pdns.d/pdns.local or any
-other file in /etc/powerdns/pdns.d/. Please note that there can only
+/etc/powerdns/pdns.d/pdns.local.conf are the user changes. The
+configuration for specific backends can go into
+/etc/powerdns/pdns.d/pdns.local.conf or any other file in
+/etc/powerdns/pdns.d/ending in .conf. Please note that there can only
 be a single launch= statement, and that you need to take care that
 your editor does not leave backup files around, as PowerDNS reads
-every file in the directory (see http://wiki.powerdns.com/trac/ticket/493)
+every file in the directory (see
+http://wiki.powerdns.com/trac/ticket/493)
 
  + Chroot
 

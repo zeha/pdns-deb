@@ -8,8 +8,8 @@ set -e
 . /usr/share/debconf/confmodule
 . /usr/share/dbconfig-common/dpkg/postinst.sqlite3
 dbc_first_version="3.0-1"
-dbc_generate_include_args="-o template_infile=/usr/share/doc/pdns-backend-sqlite3/examples/pdns.local.gsqlite3"
-dbc_generate_include=template:/etc/powerdns/pdns.d/pdns.local.gsqlite3
+dbc_generate_include_args="-o template_infile=/usr/share/doc/pdns-backend-sqlite3/examples/pdns.local.gsqlite3.conf"
+dbc_generate_include=template:/etc/powerdns/pdns.d/pdns.local.gsqlite3.conf
 dbc_generate_include_owner=pdns
 dbc_generate_include_perms=0640
 dbc_dbfile_owner=pdns:pdns
