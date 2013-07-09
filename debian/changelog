@@ -1,6 +1,6 @@
-pdns (3.3rc2-0+exp1) experimental; urgency=low
+pdns (3.3-0+exp1) experimental; urgency=low
 
-  * New Upstream release candidate
+  * New Upstream Release
     * Fix for Upstream #555 (patch 2720) to build with botan. This
       might address #675410, thanks to Florian Obser and Marcus
       'darix' Rueckert.
