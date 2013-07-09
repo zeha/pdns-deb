@@ -1,7 +1,6 @@
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/array.hpp>
 #include <boost/accumulators/statistics.hpp>
-#include <boost/accumulators/statistics/p_square_cumulative_distribution.hpp>
 #include <boost/program_options.hpp>
 #include "inflighter.cc"
 #include <deque>
@@ -295,7 +294,6 @@ int main(int argc, char** argv)
   
   cerr<<"\n";
   cerr<< "Mean response time: "<<mean(*sr.d_acc) << " msec"<<", median: "<<median(*sr.d_acc)<< " msec\n";
-  typedef boost::iterator_range<std::vector<std::pair<double, double> >::iterator > histogram_type;
   
   boost::format statfmt("Time < %6.03f msec %|30t|%6.03f%% cumulative\n");
   

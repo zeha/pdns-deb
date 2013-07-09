@@ -2,12 +2,12 @@
 .\"     Title: dnstcpbench
 .\"    Author: [see the "AUTHOR" section]
 .\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
-.\"      Date: 06/27/2013
+.\"      Date: 07/05/2013
 .\"    Manual: \ \&
 .\"    Source: \ \&
 .\"  Language: English
 .\"
-.TH "DNSTCPBENCH" "1" "06/27/2013" "\ \&" "\ \&"
+.TH "DNSTCPBENCH" "1" "07/05/2013" "\ \&" "\ \&"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -31,10 +31,10 @@
 dnstcpbench \- tool to perform TCP benchmarking of nameservers
 .SH "SYNOPSIS"
 .sp
-\fIdnstcpbench\fR [\-\-help] [\-\-verbose] [\-\-udp\-first, \-u] [\-\-workers] [\-\-timeout\-msec] remote\-ip\-address [remote\-port]
+\fIdnstcpbench\fR [\-\-help] [\-\-file=filename] [\-\-verbose] [\-\-udp\-first, \-u] [\-\-workers] [\-\-timeout\-msec] remote\-ip\-address [remote\-port]
 .SH "DESCRIPTION"
 .sp
-dnstcpbench reads DNS queries from standard input and sends them out in parallel to a remote nameserver\&. By default TCP/IP is used, but optionally, UDP is tried first, which allows for the benchmarking of TCP/IP fallback\&.
+dnstcpbench reads DNS queries (by default from standard input) and sends them out in parallel to a remote nameserver\&. By default TCP/IP is used, but optionally, UDP is tried first, which allows for the benchmarking of TCP/IP fallback\&.
 .sp
 The input format is one query per line: qname single\-space qtype\&. An example: www\&.powerdns\&.com ANY powerdns\&.com MX
 .sp
@@ -53,19 +53,14 @@ When benchmarking extended runs, it may be necessary to enable TIME_WAIT recycli
 The equivalent for IPv6 is not known\&.
 .SH "OPTIONS"
 .PP
-\-\-verbose
+\-f,\-\-file
 .RS 4
-Be wordy on what the program is doing
+Filename from which to read queries\&. Defaults to standard input if unspecified\&.
 .RE
 .PP
-\-\-udp\-first, \-u
+\-h,\-\-help
 .RS 4
-Attempt resolution via UDP first, only do TCP if truncated answer is received
-.RE
-.PP
-\-\-workers
-.RS 4
-Number of parallel worker threads to use\&.
+Provide a helpful message
 .RE
 .PP
 \-\-timeout\-msec
@@ -73,15 +68,30 @@ Number of parallel worker threads to use\&.
 Number of milliseconds to wait for an answer
 .RE
 .PP
-\-\-help
+\-\-udp\-first, \-u
 .RS 4
-Provide a helpful message
+Attempt resolution via UDP first, only do TCP if truncated answer is received
+.RE
+.PP
+\-v,\-\-verbose
+.RS 4
+Be wordy on what the program is doing
+.RE
+.PP
+\-\-workers
+.RS 4
+Number of parallel worker threads to use\&.
 .RE
 .sp
 Remote IP address can be IPv4 or IPv6\&. Remote port defaults to 53\&.
+.SH "STATISTICAL OUTPUT"
+.sp
+The program reports both mean and median numbers for queries per second and UDP and TCP latency\&. Each query only counts once, even if it is tried over UDP first\&. This effectively means that passing \fI\-u\fR can lower query rates if many queries get shunted to TCP\&.
 .SH "BUGS"
 .sp
 Currently the timeout code does not actually perform non\-blocking connects or writes\&. So a slow connect or slow writes will still cause low performance and delays\&.
+.sp
+Median queries per second statistics are reported as 0 for sub\-second runs\&.
 .SH "AUTHOR"
 .sp
 Written by PowerDNS\&.COM BV, bert hubert, <\m[blue]\fBbert\&.hubert@netherlabs\&.nl\fR\m[]\&\s-2\u[1]\d\s+2>

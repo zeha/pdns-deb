@@ -76,7 +76,7 @@ latlon2ul(const char **latlonstrptr, int *which)
   while (isspace(*cp))
     cp++;
   
-  if (!(isdigit(*cp)))
+  if (*cp && !(isdigit(*cp)))
     goto fndhemi;
   
   while (isdigit(*cp))
@@ -95,7 +95,7 @@ latlon2ul(const char **latlonstrptr, int *which)
     }
   }
   
-  while (!isspace(*cp))   /* if any trailing garbage */
+  while (*cp && !isspace(*cp))   /* if any trailing garbage */
     cp++;
   
   while (isspace(*cp))
@@ -136,7 +136,7 @@ latlon2ul(const char **latlonstrptr, int *which)
 
   cp++;                   /* skip the hemisphere */
   
-  while (!isspace(*cp))   /* if any trailing garbage */
+  while (*cp && !isspace(*cp))   /* if any trailing garbage */
     cp++;
   
   while (isspace(*cp))    /* move to next field */
@@ -219,7 +219,7 @@ LOCRecordContent::LOCRecordContent(const string& content, const string& zone) : 
     }
     break;
   default:                /* we didn't get one of each */
-    return;
+    throw MOADNSException("Error decoding LOC content");
   }
 
   /* altitude */

@@ -171,7 +171,7 @@
 #define PACKAGE_NAME "pdns"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "pdns 3.3-rc2"
+#define PACKAGE_STRING "pdns 3.3"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "pdns"
@@ -180,7 +180,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "3.3-rc2"
+#define PACKAGE_VERSION "3.3"
 
 /* If we want HTTP connector */
 #define REMOTEBACKEND_HTTP 1
@@ -201,7 +201,7 @@
 /* #undef VERBOSELOG */
 
 /* Version number of package */
-#define VERSION "3.3-rc2"
+#define VERSION "3.3"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

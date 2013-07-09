@@ -1,6 +1,6 @@
 dnl intro
 dnl The following lines may be patched by set-version-auth.
-AC_INIT([pdns], [3.3-rc2])
+AC_INIT([pdns], [3.3])
 AC_SUBST([DIST_HOST], [jenkins@autotest.powerdns.com])
 dnl End patch area.
 AC_CONFIG_SRCDIR([pdns/receiver.cc])
