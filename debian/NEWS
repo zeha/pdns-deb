@@ -1,4 +1,4 @@
-pdns (3.3rc2-0+exp1) experimental; urgency=low
+pdns (3.3-0+exp1) experimental; urgency=low
 
   The sqlite backend was removed upstream in PowerDNS 3.3. If you're
   using this backend, it is strongly recommended that you migrate to
@@ -6,6 +6,19 @@ pdns (3.3rc2-0+exp1) experimental; urgency=low
   currently no automated migration path. I will accept a tested and
   documented patch for the package if you would like to contribute
   one.
+  
+  In PowerDNS 3.3, upstream implemented an include directive for the
+  configuration file. Unlike the variant that we had patched into
+  PowerDNS up to 3.1, the directive is now called include-dir and not
+  include, and it only includes file that end in *.conf. If you choose
+  to keep your local configuration, you need to make those changes
+  manually in your configuration. If you choose to keep your old
+  configuration, the postinst takes care of the rename, but you need to
+  manually change your include directives to include-dir.
+  
+  The lazy-recursion parameter has been removed in PowerDNS 3.3.
+  If you choose to keep your old configuration, you need to manually
+  remove or comment it in your configuration.
 
  -- Marc Haber <mh+debian-packages@zugschlus.de>  Tue, 02 Jul 2013 07:40:36 +0000
 
