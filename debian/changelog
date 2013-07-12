@@ -1,4 +1,4 @@
-pdns (3.3-0+exp1) experimental; urgency=low
+pdns (3.3-1~exp1) experimental; urgency=low
 
   * New Upstream Release
     * Fix for Upstream #555 (patch 2720) to build with botan. This
@@ -12,12 +12,21 @@ pdns (3.3-0+exp1) experimental; urgency=low
     * remove lazy-recursion from default config
     * refresh patches, remove obsolete patches
   * disable dnssec in default configuration to not break updates
-  * upstream now has include-dir. Use it, remove our patch for include
+  * upstream now has include-dir
+    * Use it instead of include
+    * remove our patch for include
+    * rename config files to .conf
   * remove --with autotools-dev (see dh-autoreconf(7))
   * zap dnslabeltext.cc in clean (see Upstream #554)
   * ship dnsreplay, dnswasher and dnsscope
+  * add PDNSDEBUG environment variable to all postinst scripts
+  * properly handle pdns.simplebind.conf on installation and purge
+  * re-work conffile handling in postinst and postrm scripts
+  * document changes in configuration syntax/semantics for updaters
+  * depend on lsb-base (>= 3.2-14)
+  * do not call in /lib/init/vars.sh any more (lintian)
 
- -- Marc Haber <mh+debian-packages@zugschlus.de>  Fri, 29 Jun 2012 14:21:43 +0200
+ -- Marc Haber <mh+debian-packages@zugschlus.de>  Fri, 12 Jul 2013 20:11:25 +0000
 
 pdns (3.1-4) unstable; urgency=low
 
