@@ -6,6 +6,12 @@ set -e
 
 # Execute dbconfig-common
 . /usr/share/debconf/confmodule
+
+if [ -n "$PDNSDEBUG" ]; then
+  echo "now debugging $0 $@"
+  set -x
+fi
+
 . /usr/share/dbconfig-common/dpkg/postinst.pgsql
 dbc_first_version="3.0-1"
 dbc_pgsql_createdb_encoding="UTF8"

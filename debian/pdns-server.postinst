@@ -7,6 +7,11 @@ set -e
 # Load debconf
 . /usr/share/debconf/confmodule
 
+if [ -n "$PDNSDEBUG" ]; then
+  echo "now debugging $0 $@"
+  set -x
+fi
+
 PDNSCONF=/etc/powerdns/pdns.conf
 PDNSDEFAULT=/etc/default/pdns
 if [ -e $PDNSCONF ]; then

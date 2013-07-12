@@ -4,6 +4,11 @@
 
 set -e
 
+if [ -n "$PDNSDEBUG" ]; then
+  echo "now debugging $0 $@"
+  set -x
+fi
+
 # Activating trigger
 dpkg-trigger pdns-server
 

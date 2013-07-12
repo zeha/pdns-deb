@@ -4,6 +4,11 @@
 
 set -e
 
+if [ -n "$PDNSDEBUG" ]; then
+  echo "now debugging $0 $@"
+  set -x
+fi
+
 case "$1" in
   remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
   ;;

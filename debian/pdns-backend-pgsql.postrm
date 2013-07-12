@@ -4,6 +4,11 @@
 
 set -e
 
+if [ -n "$PDNSDEBUG" ]; then
+  echo "now debugging $0 $@"
+  set -x
+fi
+
 # Execute dbconfig-common
 if [ -f /usr/share/debconf/confmodule ]; then
 	. /usr/share/debconf/confmodule
