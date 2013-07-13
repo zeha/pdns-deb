@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-# Backends (mongodb removed for now, fails to compile)
+# Backends
 backends := ldap pipe gmysql gpgsql gsqlite3 geo lua
 
 DEB_HOST_MULTIARCH  ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
