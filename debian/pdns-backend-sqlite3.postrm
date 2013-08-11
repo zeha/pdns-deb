@@ -9,6 +9,8 @@ if [ -n "$PDNSDEBUG" ]; then
   set -x
 fi
 
+PKGNAME="pdns-backend-sqlite3"
+
 # Execute dbconfig-common
 if [ -f /usr/share/debconf/confmodule ]; then
 	. /usr/share/debconf/confmodule
@@ -20,11 +22,29 @@ fi
 
 # Remove configuration file, dbconfig-common might not be able to do so.
 if [ "$1" = "purge" ]; then
-	rm -f /etc/powerdns/pdns.d/pdns.local.gsqlite3.conf
-	if which ucf > /dev/null 2>&1; then
-		ucf --purge /etc/powerdns/pdns.d/pdns.local.gsqlite3.conf
-		ucfr --purge pdns-backend-sqlite3 /etc/powerdns/pdns.d/pdns.local.gsqlite3.conf
-	fi
+    # Remove files registered with ucf.
+    # this has been pulled from aide-common.postrm
+    
+    UCF="ucf"
+    UCFR="ucfr"
+
+    if command -v ucfq >/dev/null; then
+      for file in $(ucfq --with-colons "$PKGNAME" | cut --delimiter=: --fields=1); do
+        for ext in '~' '%' .bak .dpkg-tmp .dpkg-new .dpkg-old .dpkg-dist;  do
+          rm -f ${file}$ext
+        done
+        rm -f ${file}
+
+        if command -v $UCF >/dev/null; then
+          $UCF --purge ${file}
+        fi
+        if command -v $UCFR >/dev/null; then
+          $UCFR --purge $PKGNAME ${file}
+        fi
+      done
+    else
+      echo >&2 "ucf no longer installed, not cleaning up"
+    fi
 fi
 
 # dh_installdeb will replace this with shell code automatically
