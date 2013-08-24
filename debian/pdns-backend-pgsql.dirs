@@ -2,3 +2,4 @@ usr/lib/powerdns
 usr/share/dbconfig-common/data/pdns-backend-pgsql/install/
 usr/share/dbconfig-common/data/pdns-backend-pgsql/upgrade/pgsql/
 usr/share/doc/pdns-backend-pgsql
+usr/share/pdns-backend-pgsql
