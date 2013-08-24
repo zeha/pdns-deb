@@ -1,4 +1,4 @@
-pdns (3.3-0+exp1) experimental; urgency=low
+pdns (3.3-1~exp1) experimental; urgency=low
 
   The sqlite backend was removed upstream in PowerDNS 3.3. If you're
   using this backend, it is strongly recommended that you migrate to

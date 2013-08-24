@@ -1,4 +1,4 @@
-pdns (3.3-1~exp1.0) UNRELEASED; urgency=low
+pdns (3.3-1~exp2) UNRELEASED; urgency=low
 
   * Standards-Version: 3.9.4 (no changes needed)
   * Move files used by dbconfig-common to /usr/share/PACKAGE (Closes: #710360)

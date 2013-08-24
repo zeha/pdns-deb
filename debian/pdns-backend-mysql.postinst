@@ -43,7 +43,7 @@ renameconffile() {
   fi
 }
 
-if [ "$1" == "configure" ]; then
+if [ "$1" = "configure" ]; then
   if [ -n "$2" ] && dpkg --compare-versions "$2" lt 3.3; then
     renameconffile /etc/powerdns/pdns.d/pdns.local.gmysql /etc/powerdns/pdns.d/pdns.local.gmysql.conf /dev/null
   fi
