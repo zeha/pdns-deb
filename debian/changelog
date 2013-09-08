@@ -9,6 +9,9 @@ pdns (3.3-1~exp2) UNRELEASED; urgency=low
     pdns too. (Closes: #714145)
   * Update the default schema for the PostgreSQL backend (Closes: #698911)
   * Reworked README fixes also #717356 (Closes: #717356)
+  * Add a SQL script for updating the database scheme in PostgreSQL, this will
+    be applied automatically by dbconfig-common if choosen to do so
+    (Closes: #685808, #707761)
 
  -- Matthijs Möhlmann <matthijs@cacholong.nl>  Sat, 13 Jul 2013 14:30:30 +0000
 
