@@ -1,1 +1,1 @@
-$named pdns +pdns-recursor
+$named +pdns +pdns-recursor

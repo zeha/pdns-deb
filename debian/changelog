@@ -5,6 +5,8 @@ pdns (3.3-1~exp2) UNRELEASED; urgency=low
   * Upstream fixes self notification (Closes: #374779)
   * Added Brazilian Portuguese translation, thanks to Adriano Rafael Gomes
     (Closes: #718713)
+  * All other nameservers are optional in insserv, so make that happen for
+    pdns too. (Closes: #714145)
 
  -- Matthijs Möhlmann <matthijs@cacholong.nl>  Sat, 13 Jul 2013 14:30:30 +0000
 
