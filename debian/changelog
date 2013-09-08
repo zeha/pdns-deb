@@ -7,7 +7,7 @@ pdns (3.3-1~exp2) UNRELEASED; urgency=low
     (Closes: #718713)
   * All other nameservers are optional in insserv, so make that happen for
     pdns too. (Closes: #714145)
-  * Update the base schema for the PostgreSQL backend
+  * Update the default schema for the PostgreSQL backend (Closes: #698911)
 
  -- Matthijs Möhlmann <matthijs@cacholong.nl>  Sat, 13 Jul 2013 14:30:30 +0000
 
