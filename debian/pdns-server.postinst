@@ -118,9 +118,10 @@ case "$1" in
     # There could be passwords in these files. PowerDNS first reads the
     # configuration files and then drop root privileges.
     if [ -z "$2" ]; then
-      chmod 0600 $PDNSCONF $PDNSLOCAL
-      chmod 0755 $PDNSDIR
-      chmod 0644 $PDNSDEFAULT
+      [ -e $PDNSCONF ] && chmod 0600 $PDNSCONF
+      [ -e $PDNSLOCAL ] && chmod 0600 $PDNSLOCAL
+      [ -d $PDNSDIR ] && chmod 0755 $PDNSDIR
+      [ -e $PDNSDEFAULT ] && chmod 0644 $PDNSDEFAULT
     fi
     
     # If we still have the default config, make sure bindbackend.conf exists
