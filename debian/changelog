@@ -1,5 +1,11 @@
-pdns (3.3-1~exp2) UNRELEASED; urgency=low
+pdns (3.3-1~exp1.0) UNRELEASED; urgency=low
 
+  * NOT YET RELEASED
+  
+  [Marc Haber]
+  
+  [Matthijs Möhlmann]
+  
   * Standards-Version: 3.9.4 (no changes needed)
   * Move files used by dbconfig-common to /usr/share/PACKAGE (Closes: #710360)
   * Upstream fixes self notification (Closes: #374779)
