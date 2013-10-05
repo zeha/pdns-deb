@@ -100,8 +100,6 @@ case "$1" in
     ucfr $PKGNAME $PDNSLOCAL
     ucfr $PKGNAME $PDNSDIR/pdns.simplebind.conf
 
-    renameconffile $PDNSDIR/pdns.local $PDNSDIR/pdns.local.conf $PDNSLOCALTEMP
-    renameconffile $PDNSDIR/pdns.simplebind $PDNSDIR/pdns.simplebind.conf /usr/share/pdns-server/pdns.simplebind.conf
 
     # Install the new configuration files if the user wants it.
     ucf --debconf-ok $PDNSCONFTEMP $PDNSCONF
