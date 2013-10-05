@@ -2,9 +2,7 @@ pdns (3.3-1~exp1.0) UNRELEASED; urgency=low
 
   * NOT YET RELEASED
   
-  [Marc Haber]
-  
-  [Matthijs Möhlmann]
+  [ Matthijs Möhlmann ]
   
   * Standards-Version: 3.9.4 (no changes needed)
   * Move files used by dbconfig-common to /usr/share/PACKAGE (Closes: #710360)
@@ -18,6 +16,15 @@ pdns (3.3-1~exp1.0) UNRELEASED; urgency=low
   * Add a SQL script for updating the database scheme in PostgreSQL, this will
     be applied automatically by dbconfig-common if chosen to do so
     (Closes: #685808, #707761)
+
+  [ Marc Haber ]
+  * be more robust with chmod in pdns-server.postinst.
+    Thanks to Peter van Dijk (Closes: #716859)
+  * fix exit code of init script to be more LSB compliant. (Closes: #708861)
+  * remove unnecessary MySQL dependency (Upstream #1032). Adapt patches.
+    (Closes: #725073)
+  * remove double code from postinst.
+    Thanks to Peter van Dijk (Closes: #725195)
 
  -- Matthijs Möhlmann <matthijs@cacholong.nl>  Sat, 13 Jul 2013 14:30:30 +0000
 
