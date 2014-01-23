@@ -1,0 +1,3 @@
+-- Field extensions to fix schema distributed in 3.1-4
+ALTER TABLE records MODIFY content VARCHAR(64000);
+ALTER TABLE supermasters MODIFY ip VARCHAR(64);

@@ -16,7 +16,7 @@ CREATE TABLE records (
   domain_id       INT DEFAULT NULL,
   name            VARCHAR(255) DEFAULT NULL,
   type            VARCHAR(6) DEFAULT NULL,
-  content         VARCHAR(255) DEFAULT NULL,
+  content         VARCHAR(64000) DEFAULT NULL,
   ttl             INT DEFAULT NULL,
   prio            INT DEFAULT NULL,
   change_date     INT DEFAULT NULL,
@@ -28,7 +28,7 @@ CREATE INDEX nametype_index ON records(name,type);
 CREATE INDEX domain_id ON records(domain_id);
 
 create table supermasters (
-  ip VARCHAR(25) NOT NULL, 
+  ip VARCHAR(64) NOT NULL,
   nameserver VARCHAR(255) NOT NULL, 
   account VARCHAR(40) DEFAULT NULL
 );
