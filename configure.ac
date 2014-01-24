@@ -1,10 +1,10 @@
 dnl intro
 dnl The following lines may be patched by set-version-auth.
-AC_INIT([pdns], [3.3])
+AC_INIT([pdns], [3.3.1])
 AC_SUBST([DIST_HOST], [jenkins@autotest.powerdns.com])
 dnl End patch area.
 AC_CONFIG_SRCDIR([pdns/receiver.cc])
-AM_INIT_AUTOMAKE([foreign tar-ustar -Wno-portability])
+AM_INIT_AUTOMAKE([foreign tar-ustar -Wno-portability subdir-objects])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_CANONICAL_HOST
 LT_INIT
@@ -27,6 +27,9 @@ AC_LANG_CPLUSPLUS
 dnl Check for lua
 AC_MSG_CHECKING(if with lua)
 AC_ARG_WITH(lua, AC_HELP_STRING([--with-lua],[use Lua]), [WITH_LUA=$withval],[WITH_LUA=yes])
+
+# detect pkg-config explicitly
+PKG_PROG_PKG_CONFIG
 
 AC_MSG_RESULT($WITH_LUA)
 if test "$WITH_LUA" != "no"; then
@@ -67,10 +70,6 @@ if test x"$enable_unit_tests" = "xyes"; then
    BOOST_TEST([mt])
 fi
 #BOOST_SYSTEM([mt])
-
-# detect pkg-config explicitly
-PKG_PROG_PKG_CONFIG
-
 
 dnl Allow user to require SQLite3
 AC_MSG_CHECKING(whether user requires sqlite3)
@@ -162,7 +161,7 @@ linux*)
 	THREADFLAGS="-pthread"
 	CXXFLAGS="-D_GNU_SOURCE $CXXFLAGS"
 	;;
-darwin11* | darwin12*)
+darwin11* | darwin12* | darwin13*)
 	AC_DEFINE(HAVE_IPV6,1,[If the host operating system understands IPv6])
 	DYNLINKFLAGS="-rdynamic"
 	LDFLAGS="-pthread $LDFLAGS"
@@ -189,31 +188,49 @@ if test $enable_verbose_logging = yes; then AC_DEFINE(VERBOSELOG, 1, [If verbose
 fi
 AC_MSG_RESULT($enable_verbose_logging)
 
-AC_MSG_CHECKING(whether we will try to link in system PolarSSL)
 AC_ARG_WITH([system-polarssl],
- [AC_HELP_STRING([--without-system-polarssl], [do not use system PolarSSL])],
- [system_polarssl=$withval],
- [system_polarssl=yes])
-AC_MSG_RESULT($system_polarssl)
-AM_CONDITIONAL(HAVE_LIBPOLARSSL, false)
-if test x$system_polarssl = xyes; then
- AC_MSG_CHECKING([PolarSSL version >= 1.1])
- AC_COMPILE_IFELSE(
-    [AC_LANG_PROGRAM(
-        [[
-#include <polarssl/version.h>
-        ]],
-        [[
-#if POLARSSL_VERSION_NUMBER < 0x01010000
-#error invalid version
-#endif
-        ]]
-    )], [use_system_polarssl=yes], [use_system_polarssl=no])
- AC_MSG_RESULT($use_system_polarssl)
-fi
-if test x$use_system_polarssl = xyes; then
- AC_CHECK_LIB([polarssl], [sha1_hmac])
-fi
+ AS_HELP_STRING([--without-system-polarssl], [do not use system PolarSSL]))
+
+AS_IF([test "x$with_system_polarssl" != "xno"],
+      [AC_CHECK_LIB([polarssl], [sha1_hmac], [
+        AC_MSG_CHECKING([PolarSSL version >= 1.1])
+        AC_COMPILE_IFELSE(
+                          [AC_LANG_PROGRAM(
+                           [[
+                            #include <polarssl/version.h>
+                            ]],
+                            [[
+                             #if POLARSSL_VERSION_NUMBER < 0x01010000
+                             #error invalid version
+                             #endif
+                             ]]
+                            )],
+                            [have_system_polarssl=yes],
+                            [have_system_polarssl=no])
+        AC_MSG_RESULT($have_system_polarssl) ],
+        [have_system_polarssl=no])],
+      [have_system_polarssl=no]
+)
+
+POLARSSL_SUBDIR=ext/polarssl-1.1.2
+POLARSSL_CFLAGS=-I\$\(top_srcdir\)/pdns/$POLARSSL_SUBDIR/include/
+POLARSSL_LIBS=\$\(top_builddir\)/pdns/$POLARSSL_SUBDIR/library/libpolarssl.a
+
+AS_IF([test "x$have_system_polarssl" = "xyes"],
+      [
+       POLARSSL_CFLAGS=
+       POLARSSL_LIBS=-lpolarssl
+       POLARSSL_SUBDIR=
+       ],
+      [AS_IF([test "x$with_system_polarssl" = "xyes"],
+             [AC_MSG_ERROR([use of system polarssl requested but not found])]
+            )] )
+
+AC_MSG_CHECKING(whether we will try to link in system PolarSSL)
+AC_MSG_RESULT($have_system_polarssl)
+AC_SUBST(POLARSSL_CFLAGS)
+AC_SUBST(POLARSSL_LIBS)
+AC_SUBST(POLARSSL_SUBDIR)
 
 AC_MSG_CHECKING(whether we will be linking in Botan 1.10)
 AC_ARG_ENABLE(botan1.10,

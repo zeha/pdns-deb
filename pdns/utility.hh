@@ -91,7 +91,14 @@ private:
 #else
   typedef int sem_value_t;
 
-#endif
+#if DARWIN || _AIX || __APPLE__
+  uint32_t       m_magic;
+  pthread_mutex_t m_lock;
+  pthread_cond_t  m_gtzero;
+  sem_value_t     m_count;
+  uint32_t       m_nwaiters;
+#endif // DARWIN || _AIX || __APPLE__
+#endif // WIN32
 
 protected:
 public:
@@ -201,7 +208,8 @@ public:
   static void usleep( unsigned long usec );
 
   static time_t timegm(struct tm *tm);
-  
+
+  static void gmtime_r(const time_t *timer, struct tm *tmbuf);
 };
 
 

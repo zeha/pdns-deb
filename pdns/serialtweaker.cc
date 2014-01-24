@@ -62,10 +62,11 @@ uint32_t calculateEditSoa(SOAData sd, const string& kind) {
     uint32_t inception_serial = localtime_format_YYYYMMDDSS(inception, 1);
     uint32_t dont_increment_after = localtime_format_YYYYMMDDSS(inception + 2*86400, 99);
 
-    if(sd.serial <= dont_increment_after)
-      return (sd.serial + 2); /* "day00" and "day01" are reserved for inception increasing, so increment sd.serial by two */
-    else if(sd.serial < inception_serial) 
-      return inception_serial;
+    if(sd.serial < inception_serial - 1) { /* less than <inceptionday>00 */
+      return inception_serial; /* return <inceptionday>01   (skipping <inceptionday>00 as possible value) */
+    } else if(sd.serial <= dont_increment_after) { /* >= <inceptionday>00 but <= <inceptionday+2>99 */
+      return (sd.serial + 2); /* "<inceptionday>00" and "<inceptionday>01" are reserved for inception increasing, so increment sd.serial by two */
+    }
   }
   else if(pdns_iequals(kind,"INCEPTION-WEEK")) {
     time_t inception = getStartOfWeek();
@@ -79,7 +80,7 @@ uint32_t calculateEditSoa(SOAData sd, const string& kind) {
     return time(0);
   }
   else if(pdns_iequals(kind,"INCEPTION-EPOCH")) {
-    time_t inception = getStartOfWeek();
+    uint32_t inception = getStartOfWeek();
     if (sd.serial < inception)
       return inception;
   }
