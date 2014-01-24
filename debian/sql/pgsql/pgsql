@@ -34,13 +34,6 @@ create table supermasters (
           account VARCHAR(40) DEFAULT NULL
 );
 
--- GRANT SELECT ON supermasters TO pdns;
--- GRANT ALL ON domains TO pdns;
--- GRANT ALL ON domains_id_seq TO pdns;
--- GRANT ALL ON records TO pdns;
--- GRANT ALL ON records_id_seq TO pdns;
-
-        
 alter table records add ordername   VARCHAR(255);
 alter table records add auth bool;
 create index recordorder on records (domain_id, ordername text_pattern_ops);
@@ -64,12 +57,6 @@ create table cryptokeys (
 );       
 create index domainidindex on cryptokeys(domain_id);
 
-
--- GRANT ALL ON domainmetadata TO pdns;
--- GRANT ALL ON domainmetadata_id_seq TO pdns;
--- GRANT ALL ON cryptokeys TO pdns;
--- GRANT ALL ON cryptokeys_id_seq TO pdns;
-
 create table tsigkeys (
  id         SERIAL PRIMARY KEY,
  name       VARCHAR(255),
@@ -79,6 +66,4 @@ create table tsigkeys (
 
 create unique index namealgoindex on tsigkeys(name, algorithm);
 
--- GRANT ALL ON tsigkeys TO pdns;
--- GRANT ALL ON tsigkeys_id_seq TO pdns;
 alter table records alter column type type VARCHAR(10);

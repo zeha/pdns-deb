@@ -33,10 +33,6 @@ create table supermasters (
   account VARCHAR(40) DEFAULT NULL
 );
 
-GRANT SELECT ON supermasters TO pdns;
-GRANT ALL ON domains TO pdns;
-GRANT ALL ON records TO pdns;
-
 create table domainmetadata (
  id              INT auto_increment,
  domain_id       INT NOT NULL,
