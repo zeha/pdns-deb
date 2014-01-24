@@ -34,11 +34,11 @@ static const char _dnstext_key_offsets[] = {
 	25
 };
 
-static const char _dnstext_trans_keys[] = {
-	34, 34, 92, 127, 0, 8, 11, 31, 
-	48, 57, 48, 57, 48, 57, 34, 92, 
-	127, 0, 8, 11, 31, 32, 34, 9, 
-	13, 34, 0
+static const unsigned char _dnstext_trans_keys[] = {
+	34u, 34u, 92u, 127u, 0u, 8u, 11u, 31u, 
+	48u, 57u, 48u, 57u, 48u, 57u, 34u, 92u, 
+	127u, 0u, 8u, 11u, 31u, 32u, 34u, 9u, 
+	13u, 34u, 0
 };
 
 static const char _dnstext_single_lengths[] = {
@@ -82,7 +82,7 @@ static const int dnstext_error = 0;
 static const int dnstext_en_main = 1;
 
 
-#line 25 "dnslabeltext.rl"
+#line 26 "dnslabeltext.rl"
 
 	(void)dnstext_error;  // silence warnings
 	(void)dnstext_en_main;
@@ -106,7 +106,7 @@ static const int dnstext_en_main = 1;
 	unsigned int _trans;
 	const char *_acts;
 	unsigned int _nacts;
-	const char *_keys;
+	const unsigned char *_keys;
 
 	if ( p == pe )
 		goto _test_eof;
@@ -118,9 +118,9 @@ _resume:
 
 	_klen = _dnstext_single_lengths[cs];
 	if ( _klen > 0 ) {
-		const char *_lower = _keys;
-		const char *_mid;
-		const char *_upper = _keys + _klen - 1;
+		const unsigned char *_lower = _keys;
+		const unsigned char *_mid;
+		const unsigned char *_upper = _keys + _klen - 1;
 		while (1) {
 			if ( _upper < _lower )
 				break;
@@ -131,7 +131,7 @@ _resume:
 			else if ( (*p) > *_mid )
 				_lower = _mid + 1;
 			else {
-				_trans += (_mid - _keys);
+				_trans += (unsigned int)(_mid - _keys);
 				goto _match;
 			}
 		}
@@ -141,9 +141,9 @@ _resume:
 
 	_klen = _dnstext_range_lengths[cs];
 	if ( _klen > 0 ) {
-		const char *_lower = _keys;
-		const char *_mid;
-		const char *_upper = _keys + (_klen<<1) - 2;
+		const unsigned char *_lower = _keys;
+		const unsigned char *_mid;
+		const unsigned char *_upper = _keys + (_klen<<1) - 2;
 		while (1) {
 			if ( _upper < _lower )
 				break;
@@ -154,7 +154,7 @@ _resume:
 			else if ( (*p) > _mid[1] )
 				_lower = _mid + 2;
 			else {
-				_trans += ((_mid - _keys)>>1);
+				_trans += (unsigned int)((_mid - _keys)>>1);
 				goto _match;
 			}
 		}
@@ -174,27 +174,27 @@ _match:
 		switch ( *_acts++ )
 		{
 	case 0:
-#line 37 "dnslabeltext.rl"
+#line 38 "dnslabeltext.rl"
 	{ 
                         ret.push_back(segment);
                         segment.clear();
                 }
 	break;
 	case 1:
-#line 41 "dnslabeltext.rl"
+#line 42 "dnslabeltext.rl"
 	{ 
                         segment.clear();
                 }
 	break;
 	case 2:
-#line 45 "dnslabeltext.rl"
+#line 46 "dnslabeltext.rl"
 	{
                   char c = *p;
                   appendSplit(ret, segment, c);
                 }
 	break;
 	case 3:
-#line 49 "dnslabeltext.rl"
+#line 50 "dnslabeltext.rl"
 	{
                   char c = *p;
                   val *= 10;
@@ -203,14 +203,14 @@ _match:
                 }
 	break;
 	case 4:
-#line 55 "dnslabeltext.rl"
+#line 56 "dnslabeltext.rl"
 	{
                   appendSplit(ret, segment, val);
                   val=0;
                 }
 	break;
 	case 5:
-#line 60 "dnslabeltext.rl"
+#line 61 "dnslabeltext.rl"
 	{
                   appendSplit(ret, segment, *(p));
                 }
@@ -232,7 +232,7 @@ _again:
 	while ( __nacts-- > 0 ) {
 		switch ( *__acts++ ) {
 	case 0:
-#line 37 "dnslabeltext.rl"
+#line 38 "dnslabeltext.rl"
 	{ 
                         ret.push_back(segment);
                         segment.clear();
@@ -246,7 +246,7 @@ _again:
 	_out: {}
 	}
 
-#line 73 "dnslabeltext.rl"
+#line 74 "dnslabeltext.rl"
 
 
         if ( cs < dnstext_first_final ) {

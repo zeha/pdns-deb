@@ -78,9 +78,6 @@
 /* Have -lopendbx */
 #undef HAVE_LIBOPENDBX
 
-/* Define to 1 if you have the `polarssl' library (-lpolarssl). */
-#undef HAVE_LIBPOLARSSL
-
 /* Define to 1 if you have the <limits.h> header file. */
 #undef HAVE_LIMITS_H
 

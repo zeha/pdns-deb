@@ -9,11 +9,7 @@
 #include <boost/algorithm/string.hpp>
 #include "dnssecinfra.hh" 
 #include "dnsseckeeper.hh"
-#ifdef HAVE_LIBPOLARSSL
 #include <polarssl/sha1.h>
-#else
-#include "ext/polarssl-1.1.2/include/polarssl/sha1.h"
-#endif
 #include <boost/assign/std/vector.hpp> // for 'operator+=()'
 #include <boost/assign/list_inserter.hpp>
 #include "base64.hh"
@@ -426,7 +422,11 @@ void decodeDERIntegerSequence(const std::string& input, vector<string>& output)
 
 string calculateMD5HMAC(const std::string& key_, const std::string& text)
 {
-  const unsigned char* key=(const unsigned char*)key_.c_str();
+  string key__ = key_;
+  if (key__.size() > 64)
+    key__ = pdns_md5sum(key_);
+
+  const unsigned char* key=(const unsigned char*)key__.c_str();
   unsigned char keyIpad[64];
   unsigned char keyOpad[64];
 
@@ -533,7 +533,7 @@ void addTSIG(DNSPacketWriter& pw, TSIGRecordContent* trc, const string& tsigkeyn
 
   trc->d_mac = calculateMD5HMAC(tsigsecret, toSign);
   //  d_trc->d_mac[0]++; // sabotage
-  pw.startRecord(tsigkeyname, QType::TSIG, 0, 0xff, DNSPacketWriter::ADDITIONAL); 
+  pw.startRecord(tsigkeyname, QType::TSIG, 0, 0xff, DNSPacketWriter::ADDITIONAL, false);
   trc->toPacket(pw);
   pw.commit();
 }
