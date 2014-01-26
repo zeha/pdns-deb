@@ -42,6 +42,9 @@ override_dh_fixperms:
 override_dh_installinit:
 	dh_installinit --name=pdns
 
+# Verbose build (shows used compiler/linker and their flags)
+override_dh_auto_build-arch:
+	dh_auto_build -- V=1
 
 # we need to zap generated files
 override_dh_auto_clean:
