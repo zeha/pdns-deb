@@ -1,15 +1,24 @@
-pdns (3.3-1.0) UNRELEASED; urgency=low
+pdns (3.3-2) unstable; urgency=medium
 
-  * NOT YET RELEASED
+  * Fix 3.3-1 SQL upgrade script for PostgreSQL.
+    Thanks to Peter van Dijk for the patch. (Closes: #726945)
+  * Fix FTBFS on s390x.
+    Thanks to Peter van Dijk for the upstream patches. (Closes: #726863)
+  * Add myself to Uploaders
+  * Bump Standards-Version to 3.9.5 (no changes)
+  * Run make with V=1.
+    Needed to get compiler flags into the build log.
+  * Revert "disable dnssec in default configuration to not break updates"
+    Reverting to not break upgrades from wheezy.
 
- -- Marc Haber <mh+debian-packages@zugschlus.de>  Fri, 11 Oct 2013 22:43:25 +0200
+ -- Christian Hofstaedtler <zeha@debian.org>  Sun, 26 Jan 2014 23:41:14 +0100
 
 pdns (3.3-1) unstable; urgency=low
 
   * The "Habbie saves the World" release
-  
+
   [ Matthijs Möhlmann ]
-  
+
   * Standards-Version: 3.9.4 (no changes needed)
   * Move files used by dbconfig-common to /usr/share/PACKAGE (Closes: #710360)
   * Upstream fixes self notification (Closes: #374779)
