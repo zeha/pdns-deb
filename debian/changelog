@@ -1,3 +1,21 @@
+pdns (3.3.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Remove GRANTs from SQL Schema scripts.
+    The SQL install scripts from upstream used to contain GRANT statements,
+    but these were never needed with dbconfig-common, as the objects are
+    created as the runtime user, plus they can lead to installation
+    failures.
+  * Remove patch "remove-rpath-ldflags-patch"
+    The original issue has been fixed upstream in a better way.
+  * Remove upstream applied patches
+  * Remove duplicate B-D: libpolarssl-dev
+  * Update copyright file, based on work by Marc Haber (Closes: #726401)
+  * Don't overwrite launch= statements in configuration
+  * Resync default pdns.conf
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Mon, 14 Apr 2014 20:50:10 +0200
+
 pdns (3.3-2) unstable; urgency=medium
 
   * Fix 3.3-1 SQL upgrade script for PostgreSQL.
