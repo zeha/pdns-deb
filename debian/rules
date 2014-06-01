@@ -22,6 +22,7 @@ override_dh_auto_configure:
 		--with-dynmodules="$(backends)" \
 		--with-modules="" \
 		--with-pgsql-includes=`pg_config --includedir` \
+		--with-pgsql-lib=`pg_config --libdir` \
 		--with-mysql-lib=/usr/lib/$(DEB_HOST_MULTIARCH) \
 		--enable-cryptopp \
 		--enable-botan1.10 \
