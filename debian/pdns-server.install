@@ -1,10 +1,10 @@
-debian/tmp/usr/bin/pdns_control usr/bin/
-debian/tmp/usr/bin/zone2sql usr/bin/
-debian/tmp/usr/bin/pdnssec usr/bin/
-debian/tmp/usr/bin/dnswasher usr/bin/
-debian/tmp/usr/bin/dnsreplay usr/bin/
-debian/tmp/usr/bin/dnsscope usr/bin/
-debian/tmp/usr/sbin/pdns_server usr/sbin/
+usr/bin/pdns_control
+usr/bin/zone2sql
+usr/bin/pdnssec
+usr/bin/dnswasher
+usr/bin/dnsreplay
+usr/bin/dnsscope
+usr/sbin/pdns_server
 debian/config/pdns.conf usr/share/pdns-server/
 debian/config/pdns.local.conf usr/share/pdns-server/
 debian/config/pdns usr/share/pdns-server/

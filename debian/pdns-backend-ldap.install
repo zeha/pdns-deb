@@ -1,4 +1,4 @@
-debian/tmp/usr/lib/powerdns/libldapbackend.so* usr/lib/powerdns/
-debian/tmp/usr/lib/powerdns/libldapbackend.a usr/lib/powerdns/
-debian/tmp/usr/bin/zone2ldap usr/bin/
+usr/lib/*/pdns/libldapbackend.so*
+usr/lib/*/pdns/libldapbackend.a
+usr/bin/zone2ldap usr/bin/
 debian/config/dnsdomain2.schema etc/ldap/schema/
