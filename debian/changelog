@@ -1,3 +1,16 @@
+pdns (3.3.1-3) unstable; urgency=medium
+
+  * Correct libdir/pkglibdir usage.
+    PowerDNS upstream abuses autoconf libdir as the package-specific
+    library location, when they should be using pkglibdir instead, which
+    prevented us from correctly setting the multiarch libdir.
+    As the package name is set to 'pdns', modules now go into
+    ${libdir}/pdns, and libdir is now correctly set to the multiarch path,
+    so modules-dir now ends up being (ex.) /usr/lib/x86_64-linux-gnu/pdns.
+    Also fixes embedding the multiarch path as an rpath.
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Sun, 01 Jun 2014 21:37:34 +0200
+
 pdns (3.3.1-2) unstable; urgency=medium
 
   * Use pg_config to detect PostgreSQL lib dir (Closes: #750062)
