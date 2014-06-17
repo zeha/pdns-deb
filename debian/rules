@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 
 # Backends
-backends := ldap pipe gmysql gpgsql gsqlite3 geo lua
+backends := bind ldap pipe gmysql gpgsql gsqlite3 geo lua
 
 DEB_HOST_MULTIARCH  ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
