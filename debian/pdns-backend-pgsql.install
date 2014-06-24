@@ -1,7 +1,5 @@
 usr/lib/*/pdns/libgpgsqlbackend.so*
 usr/lib/*/pdns/libgpgsqlbackend.a
 debian/sql/pgsql/pgsql usr/share/dbconfig-common/data/pdns-backend-pgsql/install/
-debian/sql/pgsql/3.0-1 usr/share/dbconfig-common/data/pdns-backend-pgsql/upgrade/pgsql/
-debian/sql/pgsql/3.3-1 usr/share/dbconfig-common/data/pdns-backend-pgsql/upgrade/pgsql/
-debian/sql/pgsql/3.3.1-4 usr/share/dbconfig-common/data/pdns-backend-pgsql/upgrade/pgsql/
+debian/sql/pgsql/*.* usr/share/dbconfig-common/data/pdns-backend-pgsql/upgrade/pgsql/
 debian/config/pdns.local.gpgsql.conf usr/share/pdns-backend-pgsql
