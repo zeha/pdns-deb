@@ -4,7 +4,7 @@ Priority: extra
 Standards-Version: 3.9.5
 Maintainer: Debian PowerDNS Maintainers <pkg-pdns-maintainers@lists.alioth.debian.org>
 Uploaders: Matthijs Möhlmann <matthijs@cacholong.nl>, Marc Haber <mh+debian-packages@zugschlus.de>, Christian Hofstaedtler <zeha@debian.org>
-Build-Depends: debhelper (>= 9~), dh-autoreconf, po-debconf, libtool, flex, bison, libmysqlclient-dev, libpq-dev, libssl-dev, libpolarssl-dev, libgdbm-dev, libldap2-dev, libsqlite3-dev, dpkg-dev (>= 1.10.17), libboost-dev, libboost-serialization-dev, libboost-program-options-dev, libboost-test-dev, autotools-dev, automake, autoconf, liblua5.1-0-dev, pkg-config, libcrypto++-dev, ragel, libgmp-dev, libbotan1.10-dev
+Build-Depends: debhelper (>= 9~), dh-autoreconf, po-debconf, libtool, flex, bison, libmysqlclient-dev, libpq-dev, libssl-dev, libpolarssl-dev, libgdbm-dev, libldap2-dev, libsqlite3-dev, dpkg-dev (>= 1.10.17), libboost-dev, libboost-serialization-dev, libboost-program-options-dev, libboost-test-dev, autotools-dev, automake, autoconf, liblua5.1-0-dev, pkg-config, libcrypto++-dev, ragel, libgmp-dev, libbotan1.10-dev, libcurl4-openssl-dev, libzmq-dev, liblmdb-dev
 Vcs-Git: git://git.debian.org/pkg-pdns/pdns.git
 Vcs-Browser: http://git.debian.org/?p=pkg-pdns/pdns.git
 Homepage: http://www.powerdns.com/
@@ -125,10 +125,48 @@ Package: pdns-backend-lua
 Architecture: any
 Depends: pdns-server (>= ${source:Version}), ${shlibs:Depends}, ${misc:Depends}
 Provides: pdns-backend
-Description: lua backend for PowerDNS
+Description: Lua backend for PowerDNS
  PowerDNS is a versatile nameserver which supports a large number
  of different backends ranging from simple zonefiles to relational
  databases and load balancing/failover algorithms.
  PowerDNS tries to emphasize speed and security.
  .
- This package contains a lua backend for PowerDNS.
+ This package contains the Lua backend for PowerDNS.
+
+Package: pdns-backend-lmdb
+Architecture: any
+Depends: pdns-server (>= ${source:Version}), ${shlibs:Depends}, ${misc:Depends}
+Provides: pdns-backend
+Description: lmdb backend for PowerDNS
+ PowerDNS is a versatile nameserver which supports a large number
+ of different backends ranging from simple zonefiles to relational
+ databases and load balancing/failover algorithms.
+ PowerDNS tries to emphasize speed and security.
+ .
+ This package contains the Symas Lightning Memory-Mapped Database
+ backend for PowerDNS.
+
+Package: pdns-backend-remote
+Architecture: any
+Depends: pdns-server (>= ${source:Version}), ${shlibs:Depends}, ${misc:Depends}
+Provides: pdns-backend
+Description: remote backend for PowerDNS
+ PowerDNS is a versatile nameserver which supports a large number
+ of different backends ranging from simple zonefiles to relational
+ databases and load balancing/failover algorithms.
+ PowerDNS tries to emphasize speed and security.
+ .
+ This package contains the remote backend for PowerDNS. It is suitable
+ for serving data acquired from an AF_UNIX, pipe, or HTTP connector.
+
+Package: pdns-backend-mydns
+Architecture: any
+Depends: pdns-server (>= ${source:Version}), ${shlibs:Depends}, ${misc:Depends}
+Provides: pdns-backend
+Description: MyDNS compatibility backend for PowerDNS
+ PowerDNS is a versatile nameserver which supports a large number
+ of different backends ranging from simple zonefiles to relational
+ databases and load balancing/failover algorithms.
+ PowerDNS tries to emphasize speed and security.
+ .
+ This package contains the MyDNS compatibility backend for PowerDNS.
