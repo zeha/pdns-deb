@@ -1,3 +1,11 @@
+pdns (3.3.1-4) unstable; urgency=medium
+
+  * Drop unused pdns-backend-mongodb.prerm file
+  * Update schema migration files for 3.3.1.
+    In the case of MySQL, this includes the migration up from 3.0!
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Tue, 24 Jun 2014 14:50:17 +0200
+
 pdns (3.3.1-3) unstable; urgency=medium
 
   * Correct libdir/pkglibdir usage.
