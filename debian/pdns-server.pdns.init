@@ -7,7 +7,8 @@
 # Default-Stop:      0 1 6
 # Should-Start:      slapd
 # Should-Stop:       slapd
-# Short-Description: PDNS is a versatile high performance authoritative nameser
+# Short-Description: PowerDNS Authoritative Name Server
+# Description: PDNS is a versatile high performance authoritative nameser
 ### END INIT INFO
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin
@@ -20,6 +21,7 @@ DESC="$ODESC"
 NAME=pdns
 DAEMON=/usr/sbin/pdns_server
 DAEMON_ARGS=""
+CONTROL=/usr/sbin/pdns_control
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
 
@@ -34,7 +36,7 @@ cd $SOCKETPATH
 # Handle instance scripts
 suffix=$(basename $0 | cut -d- -f2- -s)
 
-if [ $suffix ]; then
+if [ -n "$suffix" ]; then
 	SUFFIX="--config-name=$suffix"
 	DAEMON_ARGS="$DAEMON_ARGS $SUFFIX"
 	NAME="$NAME-$suffix"
@@ -48,7 +50,7 @@ fi
 # function to invoke properly parametrized pdns_control
 doPC()
 {
-	pdns_control $SUFFIX $1 $2 2> /dev/null
+	$CONTROL $SUFFIX $1 $2 2> /dev/null
 	return $?
 }
 
@@ -63,17 +65,17 @@ isrunning()
 #
 do_start()
 {
-        # Return
-        #   0 if daemon has been started
-        #   1 if daemon was already running
-        #   2 if daemon could not be started
+	# Return
+	#   0 if daemon has been started
+	#   1 if daemon was already running
+	#   2 if daemon could not be started
 	if isrunning; then
 		return 1
 	fi
-        start-stop-daemon --start --quiet \
+	start-stop-daemon --start --quiet \
 		--pidfile $PIDFILE --exec $DAEMON -- \
-                $DAEMON_ARGS --daemon --guardian=yes \
-                || return 2
+		$DAEMON_ARGS --daemon --guardian=yes \
+		|| return 2
 }
 
 #
@@ -81,12 +83,12 @@ do_start()
 #
 do_stop()
 {
-        # Return
-        #   0 if daemon has been stopped
-        #   1 if daemon was already stopped
-        #   2 if daemon could not be stopped
-        #   other if a failure occurred
-        doPC quit >/dev/null
+	# Return
+	#   0 if daemon has been stopped
+	#   1 if daemon was already stopped
+	#   2 if daemon could not be stopped
+	#   other if a failure occurred
+	doPC quit >/dev/null
 	RETVAL="2"
 	for sec in $(seq 1 5); do
 		if ! isrunning; then
@@ -95,8 +97,8 @@ do_stop()
 		fi
 		sleep 1
 	done
-        [ "$RETVAL" = 2 ] && return 2
-        rm -f $PIDFILE
+	[ "$RETVAL" = 2 ] && return 2
+	rm -f $PIDFILE
 }
 
 case "$1" in
@@ -119,7 +121,7 @@ case "$1" in
 	do_stop
 	case "$?" in
 		0|1)
-			[ "$VERBOSE" != no ] && log_end_msg 
+			[ "$VERBOSE" != no ] && log_end_msg 0
 			exit 0
 			;;
 		2)
@@ -129,14 +131,14 @@ case "$1" in
 	esac
 	;;
   status)
-        if isrunning; then
+	if isrunning; then
 		log_success_msg "$NAME is running: $(doPC status)"
 		exit 0
 	else
 		log_failure_msg "$NAME is not running"
 		exit 3
-	fi 
-	;;	
+	fi
+	;;
   force-stop)
 	[ "$VERBOSE" != no ] && log_daemon_msg "Killing $ODESC (all instances)" "$NAME"
 	kill -9 $(pidof pdns_server)
@@ -152,61 +154,61 @@ case "$1" in
 	esac
 	;;
   restart)
-        log_daemon_msg "Restarting $DESC" "$NAME"
+	log_daemon_msg "Restarting $DESC" "$NAME"
 	do_stop
-        case "$?" in
-          0|1)
-                do_start
-                case "$?" in
-                        0)
-				log_end_msg 0
-				exit 0
-				;;
-                        1)
-				log_end_msg 1  # Old process is still running
-				exit 1
-				;;
-                        *)
-				log_end_msg 1 # Failed to start
-				exit 1
-				;;
-                esac
-                ;;
-          *)
-                # Failed to stop
-                log_end_msg 1
-		exit 1
-                ;;
-        esac
-        ;;
-  reload|force-reload) 
-	log_daemon_msg "Reloading $DESC" "$NAME"
-	if isrunning; then
-	  doPC cycle >/dev/null
-	  case "$?" in
-		0)
-			[ "$VERBOSE" != no ] && log_end_msg 0
-			exit 0
+	case "$?" in
+		0|1)
+			do_start
+			case "$?" in
+				0)
+					log_end_msg 0
+					exit 0
+					;;
+				1)
+					log_end_msg 1  # Old process is still running
+					exit 1
+					;;
+				*)
+					log_end_msg 1 # Failed to start
+					exit 1
+					;;
+			esac
 			;;
-		1)
-			[ "$VERBOSE" != no ] && log_end_msg 1
+		*)
+			# Failed to stop
+			log_end_msg 1
 			exit 1
 			;;
-	  esac
+	esac
+	;;
+  reload|force-reload)
+	log_daemon_msg "Reloading $DESC" "$NAME"
+	if isrunning; then
+		doPC cycle >/dev/null
+		case "$?" in
+			0)
+				[ "$VERBOSE" != no ] && log_end_msg 0
+				exit 0
+				;;
+			1)
+				[ "$VERBOSE" != no ] && log_end_msg 1
+				exit 1
+				;;
+		esac
 	else
-	  log_end_msg 0
-	  exit 7
+		log_end_msg 0
+		exit 7
 	fi
-	;;		
+	;;
   monitor)
 	if isrunning; then
 		echo "already running"
 		exit 1
 	else
-		pdns_server $DAEMON_ARGS --daemon=no --guardian=no --control-console --loglevel=9
+		$DAEMON $DAEMON_ARGS --daemon=no --guardian=no --control-console --loglevel=9
 		exit 0
-	fi 
-	;;		
+	fi
+	;;
   dump)
 	if isrunning; then
 		doPC list
@@ -214,8 +216,8 @@ case "$1" in
 	else
 		echo "not running"
 		exit 7
-	fi 
-	;;		
+	fi
+	;;
   show)
 	if isrunning; then
 		if [ $# -lt 2 ]; then
@@ -228,14 +230,14 @@ case "$1" in
 	else
 		echo "not running"
 		exit 7
-	fi 
-	;;		
+	fi
+	;;
   mrtg)
 	if isrunning; then
 		if [ $# -lt 2 ]; then
 			echo "Insufficient parameters"
 			exit 2
-		fi 
+		fi
 		doPC show $2
 		if [ "$3x" != "x" ]; then
 			doPC show $3
@@ -248,21 +250,21 @@ case "$1" in
 	else
 		echo "not running"
 		exit 7
-	fi 
-	;;		
+	fi
+	;;
   cricket)
 	if isrunning; then
 		if [ $# -lt 2 ]; then
 			echo "Insufficient parameters"
 			exit 1
-		fi 
+		fi
 		doPC show $2
 		exit 0
 	else
 		echo "not running"
 		exit 7
-	fi 
-	;;		
+	fi
+	;;
   *)
 	echo "Usage: $SCRIPTNAME {start|stop|status|force-stop|restart|reload|monitor|dump|show|mrtg|cricket}"
 	;;
