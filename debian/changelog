@@ -1,3 +1,20 @@
+pdns (3.4.0~rc1-1) experimental; urgency=medium
+
+  * New upstream release candidate, target experimental
+    * Update schema files for 3.4.0
+    * Add lmdb, mydns, remote backends
+    * Remove upstream applied patch to honor PKGLIBDIR
+  * Build tests in verbose mode
+  * Explicitly build with bind backend
+  * Stop installing lib*backend.a
+  * Update Vcs-* URLs to anonscm.debian.org
+  * Force usage of libpolarssl.so
+  * Skip make test: the remotebackend tests require various Ruby
+    libraries that we don't have.
+  * Update debian/copyright, the AES files are no longer distributed
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Fri, 01 Aug 2014 17:21:38 +0200
+
 pdns (3.3.1-4) unstable; urgency=medium
 
   * Drop unused pdns-backend-mongodb.prerm file
