@@ -3,8 +3,8 @@
 tmpdir		:= $(shell pwd)/debian-pdns/tmp
 be_tmpdir	:= $(shell pwd)/debian-pdns/tmp-backend
 tools_tmpdir:= $(shell pwd)/debian-pdns/tmp-tools
-backends	:= opendbx ldap pipe gmysql gpgsql gsqlite3
-debs		:= opendbx ldap pipe pgsql sqlite sqlite3
+backends	:= bind opendbx ldap pipe gmysql gpgsql gsqlite3 random
+debs		:= bind opendbx ldap pipe pgsql sqlite sqlite3 random
 
 binary-doc:
 	-make -C pdns/docs html/index.html
@@ -46,12 +46,12 @@ build-static stamp-build-static:
 		PKG_CONFIG_PATH=/opt/botan-1.10/lib/pkgconfig/ \
 		--prefix=/usr \
 		--libexecdir='$${prefix}/lib' \
-		--libdir='$${prefix}/lib/powerdns' \
+		--libdir='$${prefix}/lib' \
 		--sysconfdir=/etc/powerdns \
 		--infodir='$${datadir}/info' \
 		--mandir='$${datadir}/man' \
 		--with-pgsql-lib=/opt/postgresql/lib --with-pgsql-includes=/opt/postgresql/include \
-		--with-modules="gmysql gpgsql pipe gsqlite3 lua geo tinydns mydns opendbx remote" \
+		--with-modules="bind gmysql gpgsql pipe gsqlite3 lua geo tinydns mydns opendbx remote random" \
 		--with-dynmodules="" \
 		--enable-botan1.10 \
 		--enable-static-binaries \
@@ -65,12 +65,13 @@ build stamp-build: configure
 	./configure \
 		--prefix=/usr \
 		--libexecdir='$${prefix}/lib' \
-		--libdir='$${prefix}/lib/powerdns' \
+		--libdir='$${prefix}/lib' \
 		--sysconfdir=/etc/powerdns \
 		--infodir='$${datadir}/info' \
 		--mandir='$${datadir}/man' \
 		--with-dynmodules="$(backends)" \
-		--with-modules="geo" 
+		--with-modules="geo" \
+		--enable-tools
 	make
 	touch stamp-build
 
@@ -134,7 +135,8 @@ binary-main-prepare:
 	install -d -m 755 -o root -g root "$(tools_tmpdir)"/DEBIAN
 
 	#FIXME: shell loops hide errors
-	for prog in dnsbulktest dnsreplay dnsscan dnsscope dnstcpbench dnswasher nproxy nsec3dig ; do \
+	for prog in dnsbulktest dnsreplay dnsscan dnsscope dnstcpbench dnswasher \
+		nproxy dnsdist nsec3dig saxfr ; do \
 		mv "$(tmpdir)"/usr/bin/$$prog "$(tools_tmpdir)"/usr/bin ; \
 		[ -e "$(tmpdir)"/usr/share/man/man8/"$$prog".8 ] && \
 			mv "$(tmpdir)"/usr/share/man/man8/"$$prog".8 "$(tools_tmpdir)"/usr/share/man/man8/ ; \

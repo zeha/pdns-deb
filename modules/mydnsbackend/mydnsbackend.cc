@@ -32,7 +32,7 @@
 #include "mydnsbackend.hh"
 #include <pdns/dnspacket.hh>
 #include <pdns/ueberbackend.hh>
-#include <pdns/ahuexception.hh>
+#include <pdns/pdnsexception.hh>
 #include <pdns/logger.hh>
 #include <pdns/arguments.hh>
 
@@ -54,7 +54,7 @@ MyDNSBackend::MyDNSBackend(const string &suffix) {
         }
         catch(SSqlException &e) {
         	L<<Logger::Error<<backendName<<" Connection failed: "<<e.txtReason()<<endl;
-        	throw AhuException(backendName+"Unable to launch connection: "+e.txtReason());
+        	throw PDNSException(backendName+"Unable to launch connection: "+e.txtReason());
         }
 
         d_rrtable=getArg("rr-table");
@@ -62,6 +62,7 @@ MyDNSBackend::MyDNSBackend(const string &suffix) {
         d_rrwhere=(mustDo("rr-active")?"active = 1 and ":"")+getArg("rr-where");
         d_soawhere=(mustDo("soa-active")?"active = 1 and ":"")+getArg("soa-where");
         d_useminimalttl=mustDo("use-minimal-ttl");
+        d_minimum=0;
 
         L<<Logger::Warning<<backendName<<" Connection successful"<<endl;
 }
@@ -76,11 +77,11 @@ void MyDNSBackend::Query(const string &query) {
         try {
         	d_db->doQuery(query);
         } catch (SSqlException &e) {
-        	throw AhuException("Query failed: "+e.txtReason());
+        	throw PDNSException("Query failed: "+e.txtReason());
         }
 }
 
-bool MyDNSBackend::list(const string &target, int zoneId) {
+bool MyDNSBackend::list(const string &target, int zoneId, bool include_disabled) {
         string query;
         string sname;
         SSql::row_t rrow;
@@ -145,6 +146,7 @@ bool MyDNSBackend::getSOA(const string& name, SOAData& soadata, DNSPacket*) {
         	return false;
         }
 
+        soadata.qname = name;
         soadata.domain_id = atol(rrow[0].c_str());
         soadata.hostmaster = rrow[1];
         soadata.serial = atol(rrow[2].c_str());
@@ -225,7 +227,7 @@ void MyDNSBackend::lookup(const QType &qtype, const string &qname, DNSPacket *p,
         	this->Query(query);
 
         	if(!d_db->getRow(rrow)) {
-        		throw AhuException("lookup() passed zoneId = "+zoneIdStr+" but no such zone!");
+        		throw PDNSException("lookup() passed zoneId = "+zoneIdStr+" but no such zone!");
         	}
         	
         	found = true;
@@ -367,7 +369,7 @@ class MyDNSLoader {
 public:
         MyDNSLoader() {
         	BackendMakers().report(new MyDNSFactory());
-        	L<<Logger::Info<<backendName<<" This is the MyDNSBackend ("__DATE__", "__TIME__") reporting"<<endl;
+		L << Logger::Info << "[mydnsbackend] This is the mydns backend version " VERSION " (" __DATE__ ", " __TIME__ ") reporting" << endl;
         }
 };
 

@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -18,12 +22,9 @@
 
 #include "utility.hh"
 #include <cstdio>
-
 #include <cstdlib>
 #include <sys/types.h>
-
 #include <iostream>  
-
 #include <string>
 #include <errno.h>
 #include <boost/tokenizer.hpp>
@@ -33,7 +34,7 @@
 #include "dnsseckeeper.hh"
 #include "dns.hh"
 #include "dnsbackend.hh"
-#include "ahuexception.hh"
+#include "pdnsexception.hh"
 #include "dnspacket.hh"
 #include "logger.hh"
 #include "arguments.hh"
@@ -45,7 +46,8 @@
 #include "ednssubnet.hh"
 
 bool DNSPacket::s_doEDNSSubnetProcessing;
-
+uint16_t DNSPacket::s_udpTruncationThreshold;
+ 
 DNSPacket::DNSPacket() 
 {
   d_wrapped=false;
@@ -93,7 +95,6 @@ DNSPacket::DNSPacket(const DNSPacket &orig)
   d_eso = orig.d_eso;
   d_haveednssubnet = orig.d_haveednssubnet;
   d_haveednssection = orig.d_haveednssection;
-  
   d_dnssecOk = orig.d_dnssecOk;
   d_rrs=orig.d_rrs;
   
@@ -212,7 +213,7 @@ vector<DNSResourceRecord*> DNSPacket::getAnswerRecords()
       ++i)
     {
       if(i->d_place!=DNSResourceRecord::ADDITIONAL) 
-	arrs.push_back(&*i);
+        arrs.push_back(&*i);
     }
   return arrs;
 }
@@ -239,6 +240,11 @@ unsigned int DNSPacket::getMinTTL()
   }
 
   return minttl;
+}
+
+bool DNSPacket::isEmpty()
+{
+  return (d_rrs.empty());
 }
 
 /** Must be called before attempting to access getData(). This function stuffs all resource
@@ -278,7 +284,10 @@ void DNSPacket::wrapup()
   
   DNSPacketWriter::optvect_t opts;
   if(d_wantsnsid) {
-    opts.push_back(make_pair(3, ::arg()["server-id"]));
+    const static string mode_server_id=::arg()["server-id"];
+    if(mode_server_id != "disabled") {
+      opts.push_back(make_pair(3, mode_server_id));
+    }
   }
 
   if(!d_ednsping.empty()) {
@@ -326,12 +335,12 @@ void DNSPacket::wrapup()
         eso.scope = Netmask(eso.source.getNetwork(), maxScopeMask);
     
         string opt = makeEDNSSubnetOptsString(eso);
-        opts.push_back(make_pair(::arg().asNum("edns-subnet-option-number"), opt));
+        opts.push_back(make_pair(8, opt)); // 'EDNS SUBNET'
       }
 
       if(!opts.empty() || d_haveednssection || d_dnssecOk)
       {
-        pw.addOpt(2800, 0, d_dnssecOk ? EDNSOpts::DNSSECOK : 0, opts);
+        pw.addOpt(s_udpTruncationThreshold, 0, d_dnssecOk ? EDNSOpts::DNSSECOK : 0, opts);
         pw.commit();
       }
     }
@@ -387,7 +396,7 @@ DNSPacket *DNSPacket::replyPacket() const
   r->d_eso = d_eso;
   r->d_haveednssubnet = d_haveednssubnet;
   r->d_haveednssection = d_haveednssection;
-  
+ 
   if(!d_tsigkeyname.empty()) {
     r->d_tsigkeyname = d_tsigkeyname;
     r->d_tsigprevious = d_tsigprevious;
@@ -491,11 +500,11 @@ try
   d_havetsig = mdp.getTSIGPos();
   d_haveednssubnet = false;
   d_haveednssection = false;
-
+  
 
   if(getEDNSOpts(mdp, &edo)) {
     d_haveednssection=true;
-    d_maxreplylen=std::min(edo.d_packetsize, (uint16_t)1680);
+    d_maxreplylen=std::min(edo.d_packetsize, s_udpTruncationThreshold);
 //    cerr<<edo.d_Z<<endl;
     if(edo.d_Z & EDNSOpts::DNSSECOK)
       d_dnssecOk=true;
@@ -509,7 +518,7 @@ try
       else if(iter->first == 5) {// 'EDNS PING'
         d_ednsping = iter->second;
       }
-      else if(s_doEDNSSubnetProcessing && iter->first == ::arg().asNum("edns-subnet-option-number")) { // 'EDNS SUBNET'
+      else if(s_doEDNSSubnetProcessing && (iter->first == 8)) { // 'EDNS SUBNET'
         if(getEDNSSubnetOptsFromString(iter->second, &d_eso)) {
           //cerr<<"Parsed, source: "<<d_eso.source.toString()<<", scope: "<<d_eso.scope.toString()<<", family = "<<d_eso.scope.getNetwork().sin4.sin_family<<endl;
           d_haveednssubnet=true;
@@ -531,7 +540,7 @@ try
 
   if(!ntohs(d.qdcount)) {
     if(!d_tcp) {
-      L << Logger::Warning << "No question section in packet from " << getRemote() <<", rcode="<<(int)d.rcode<<endl;
+      L << Logger::Warning << "No question section in packet from " << getRemote() <<", error="<<RCode::to_s(d.rcode)<<endl;
       return -1;
     }
   }
@@ -590,7 +599,7 @@ void DNSPacket::commitD()
 bool checkForCorrectTSIG(const DNSPacket* q, DNSBackend* B, string* keyname, string* secret, TSIGRecordContent* trc)
 {
   string message;
-  
+
   q->getTSIGDetails(trc, keyname, &message);
   uint64_t now = time(0);
   if(abs(trc->d_time - now) > trc->d_fudge) {
@@ -598,8 +607,8 @@ bool checkForCorrectTSIG(const DNSPacket* q, DNSBackend* B, string* keyname, str
     return false;
   }
 
-  string algoName = trc->d_algoName;
-  if (stripDot(algoName) == "hmac-md5.sig-alg.reg.int")
+  string algoName = toLowerCanonic(trc->d_algoName);
+  if (algoName == "hmac-md5.sig-alg.reg.int")
     algoName = "hmac-md5";
 
   string secret64;
@@ -607,19 +616,20 @@ bool checkForCorrectTSIG(const DNSPacket* q, DNSBackend* B, string* keyname, str
     L<<Logger::Error<<"Packet for domain '"<<q->qdomain<<"' denied: can't find TSIG key with name '"<<*keyname<<"' and algorithm '"<<algoName<<"'"<<endl;
     return false;
   }
+  if (trc->d_algoName == "hmac-md5")
+    trc->d_algoName += ".sig-alg.reg.int.";
 
-  if (trc->d_algoName == "hmac-md5") 
-    trc->d_algoName += ".sig-alg.reg.int."; 
-
-  if (trc->d_algoName != "hmac-md5.sig-alg.reg.int.") {
-    L<<Logger::Error<<"Unsupported TSIG HMAC algorithm " << trc->d_algoName << endl;
-    return false;
+  TSIGHashEnum algo;
+  if(!getTSIGHashEnum(trc->d_algoName, algo)) {
+     L<<Logger::Error<<"Unsupported TSIG HMAC algorithm " << trc->d_algoName << endl;
+     return false;
   }
 
   B64Decode(secret64, *secret);
-  bool result=calculateMD5HMAC(*secret, message) == trc->d_mac;
+  bool result=calculateHMAC(*secret, message, algo) == trc->d_mac;
   if(!result) {
     L<<Logger::Error<<"Packet for domain '"<<q->qdomain<<"' denied: TSIG signature mismatch using '"<<*keyname<<"' and algorithm '"<<trc->d_algoName<<"'"<<endl;
   }
+
   return result;
 }

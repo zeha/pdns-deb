@@ -112,7 +112,7 @@ void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* retDomains) {
 void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
 	Lock l(&s_domainInfoLock);
 	if (!s_domainInfo.count(d_suffix)) {
-		throw new AhuException("Can't get list of domains to set the serial.");
+		throw new PDNSException("Can't get list of domains to set the serial.");
 	}
 	TDI_t *domains = &s_domainInfo[d_suffix];
 	TDIById_t& domain_index = domains->get<tag_domainid>();
@@ -126,7 +126,7 @@ void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
 	s_domainInfo[d_suffix] = *domains;
 }
 
-void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains) {
+void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains, bool include_disabled) {
 	d_isAxfr=true;
 	d_dnspacket = NULL;
 
@@ -152,7 +152,7 @@ void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains) {
 	}
 }
 
-bool TinyDNSBackend::list(const string &target, int domain_id) {
+bool TinyDNSBackend::list(const string &target, int domain_id, bool include_disabled) {
 	d_isAxfr=true;
 	string key = simpleCompress(target);
 	d_cdbReader=new CDB(getArg("dbfile"));
@@ -334,7 +334,7 @@ class TinyDNSLoader
 public:
 	TinyDNSLoader() {
 		BackendMakers().report(new TinyDNSFactory);
-		L<<Logger::Info<<" [TinyDNSBackend] This is the TinyDNSBackend ("__DATE__", "__TIME__") reporting"<<endl;
+		L << Logger::Info << "[tinydnsbackend] This is the tinydns backend version " VERSION " (" __DATE__ ", " __TIME__ ") reporting" << endl;
 	}
 };
 

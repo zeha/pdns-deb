@@ -17,8 +17,8 @@ using namespace boost::accumulators;
 typedef accumulator_set<
   double
   , stats<boost::accumulators::tag::median(with_p_square_quantile),
-	  boost::accumulators::tag::mean(immediate)
-	  >
+          boost::accumulators::tag::mean(immediate)
+          >
   > acc_t;
 
 
@@ -26,7 +26,7 @@ typedef accumulator_set<
 BOOST_AUTO_TEST_SUITE(test_dns_random_hh)
 
 BOOST_AUTO_TEST_CASE(test_dns_random_average) {
-  dns_random_init("/dev/urandom");
+  dns_random_init("loremipsumdolorx");
   acc_t acc;
 
 

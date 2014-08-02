@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as
     published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -39,20 +43,24 @@ bool editSOA(DNSSECKeeper& dk, const string& qname, DNSPacket* dp)
     if(rr.qtype.getCode() == QType::SOA && pdns_iequals(rr.qname,qname)) {
       string kind;
       dk.getFromMeta(qname, "SOA-EDIT", kind);
-      if(kind.empty())
-        return false;
-      SOAData sd;
-      fillSOAData(rr.content, sd);
-      sd.serial = calculateEditSoa(sd, kind);
-      rr.content = serializeSOAData(sd);      
-      return true;
+      return editSOARecord(rr, kind);
     }
   }
   return false;
 }
 
+bool editSOARecord(DNSResourceRecord& rr, const string& kind) {
+  if(kind.empty())
+    return false;
 
-uint32_t calculateEditSoa(SOAData sd, const string& kind) {
+  SOAData sd;
+  fillSOAData(rr.content, sd);
+  sd.serial = calculateEditSOA(sd, kind);
+  rr.content = serializeSOAData(sd);
+  return true;
+}
+
+uint32_t calculateEditSOA(SOAData sd, const string& kind) {
   if(pdns_iequals(kind,"INCEPTION")) {
     time_t inception = getStartOfWeek();
     return localtime_format_YYYYMMDDSS(inception, 1);

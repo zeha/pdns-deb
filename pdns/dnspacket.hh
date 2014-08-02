@@ -6,6 +6,10 @@
     under the terms of the GNU General Public License version 2 as published
     by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -34,14 +38,11 @@
 #include "iputils.hh"
 #include "ednssubnet.hh"
 
-#ifndef WIN32
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-
-#endif // WIN32
 
 #include <iostream>
 #include <string>
@@ -51,20 +52,13 @@
 #include "misc.hh"
 #include "utility.hh"
 #include "logger.hh"
-#include "ahuexception.hh"
+#include "pdnsexception.hh"
 #include "dnsrecords.hh"
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
  #endif // HAVE_CONFIG_H
 
-
-#ifdef WIN32
-# ifdef BYTE_ORDER
-#   undef BYTE_ORDER
-# endif // BYTE_ORDER
-# define BYTE_ORDER LITTLE_ENDIAN
-#endif // WIN32
 
 class DNSBackend;
 class DNSSECKeeper;
@@ -125,6 +119,7 @@ public:
   void wrapup();  // writes out queued rrs, and generates the binary packet. also shuffles. also rectifies dnsheader 'd', and copies it to the stringbuffer
   void spoofQuestion(const DNSPacket *qd); //!< paste in the exact right case of the question. Useful for PacketCache
   unsigned int getMinTTL(); //!< returns lowest TTL of any record in the packet
+  bool isEmpty(); //!< returns true if there are no rrs in the packet
 
   vector<DNSResourceRecord*> getAPRecords(); //!< get a vector with DNSResourceRecords that need additional processing
   vector<DNSResourceRecord*> getAnswerRecords(); //!< get a vector with DNSResourceRecords that are answers
@@ -158,6 +153,7 @@ public:
   vector<DNSResourceRecord>& getRRS() { return d_rrs; }
   TSIGRecordContent d_trc;
   static bool s_doEDNSSubnetProcessing;
+  static uint16_t s_udpTruncationThreshold;
 private:
   void pasteQ(const char *question, int length); //!< set the question of this packet, useful for crafting replies
 

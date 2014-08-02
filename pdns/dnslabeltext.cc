@@ -30,44 +30,41 @@ static const char _dnstext_actions[] = {
 };
 
 static const char _dnstext_key_offsets[] = {
-	0, 0, 1, 8, 10, 12, 14, 21, 
-	25
+	0, 0, 1, 3, 5, 7, 9, 11, 
+	15
 };
 
 static const unsigned char _dnstext_trans_keys[] = {
-	34u, 34u, 92u, 127u, 0u, 8u, 11u, 31u, 
-	48u, 57u, 48u, 57u, 48u, 57u, 34u, 92u, 
-	127u, 0u, 8u, 11u, 31u, 32u, 34u, 9u, 
-	13u, 34u, 0
+	34u, 34u, 92u, 48u, 57u, 48u, 57u, 48u, 
+	57u, 34u, 92u, 32u, 34u, 9u, 13u, 34u, 
+	0
 };
 
 static const char _dnstext_single_lengths[] = {
-	0, 1, 3, 0, 0, 0, 3, 2, 
+	0, 1, 2, 0, 0, 0, 2, 2, 
 	1
 };
 
 static const char _dnstext_range_lengths[] = {
-	0, 0, 2, 1, 1, 1, 2, 1, 
+	0, 0, 0, 1, 1, 1, 0, 1, 
 	0
 };
 
 static const char _dnstext_index_offsets[] = {
-	0, 0, 2, 8, 10, 12, 14, 20, 
-	24
+	0, 0, 2, 5, 7, 9, 11, 14, 
+	18
 };
 
 static const char _dnstext_trans_targs[] = {
-	2, 0, 7, 3, 0, 0, 0, 2, 
-	4, 2, 5, 0, 6, 0, 7, 3, 
-	0, 0, 0, 2, 8, 2, 8, 0, 
-	2, 0, 0
+	2, 0, 7, 3, 2, 4, 2, 5, 
+	0, 6, 0, 7, 3, 2, 8, 2, 
+	8, 0, 2, 0, 0
 };
 
 static const char _dnstext_trans_actions[] = {
-	3, 0, 0, 0, 0, 0, 0, 11, 
-	7, 5, 7, 0, 7, 0, 9, 9, 
-	0, 0, 0, 16, 0, 13, 0, 0, 
-	13, 0, 0
+	3, 0, 0, 0, 11, 7, 5, 7, 
+	0, 7, 0, 9, 9, 16, 0, 13, 
+	0, 0, 13, 0, 0
 };
 
 static const char _dnstext_eof_actions[] = {
@@ -95,12 +92,12 @@ static const int dnstext_en_main = 1;
         vector<string> ret;
 
         
-#line 99 "dnslabeltext.cc"
+#line 96 "dnslabeltext.cc"
 	{
 	cs = dnstext_start;
 	}
 
-#line 104 "dnslabeltext.cc"
+#line 101 "dnslabeltext.cc"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -215,7 +212,7 @@ _match:
                   appendSplit(ret, segment, *(p));
                 }
 	break;
-#line 219 "dnslabeltext.cc"
+#line 216 "dnslabeltext.cc"
 		}
 	}
 
@@ -238,7 +235,7 @@ _again:
                         segment.clear();
                 }
 	break;
-#line 242 "dnslabeltext.cc"
+#line 239 "dnslabeltext.cc"
 		}
 	}
 	}

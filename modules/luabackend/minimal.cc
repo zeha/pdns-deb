@@ -47,7 +47,7 @@ LUABackend::LUABackend(const string &suffix) {
 
     catch(LUAException &e) {
         L<<Logger::Error<<backend_name<<"Error: "<<e.what<<endl;
-        throw AhuException(e.what);
+        throw PDNSException(e.what);
     }
 
 }
@@ -58,7 +58,7 @@ LUABackend::~LUABackend() {
     lua_close(lua);
 }
 
-bool LUABackend::list(const string &target, int domain_id) {
+bool LUABackend::list(const string &target, int domain_id, bool include_disabled) {
     if (logging)
 	L << Logger::Info << backend_name << "(list) BEGIN" << endl;
 
@@ -72,7 +72,6 @@ bool LUABackend::list(const string &target, int domain_id) {
 	lua_pop(lua, 1);
 	
 	throw runtime_error(e);
-	return false;
     }
     
     size_t returnedwhat = lua_type(lua, -1);

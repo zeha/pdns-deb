@@ -69,7 +69,7 @@ public:
 
     return true; // still listed, still blocked
   }
-  void throttle(time_t now, const Thing& t, unsigned int ttl=0, unsigned int tries=0) 
+  void throttle(time_t now, const Thing& t, time_t ttl=0, unsigned int tries=0) 
   {
     typename cont_t::iterator i=d_cont.find(t);
     entry e={ now+(ttl ? ttl : d_ttl), tries ? tries : d_limit};
@@ -86,13 +86,13 @@ public:
     return (unsigned int)d_cont.size();
   }
 private:
-  int d_limit;
-  int d_ttl;
+  unsigned int d_limit;
+  time_t d_ttl;
   time_t d_last_clean;
   struct entry 
   {
     time_t ttd;
-    int count;
+    unsigned int count;
   };
   typedef map<Thing,entry> cont_t;
   cont_t d_cont;
@@ -173,6 +173,62 @@ private:
   bool d_needinit;
 };
 
+template<class Thing> class Counters : public boost::noncopyable
+{
+public:
+  Counters()
+  {
+  }
+  unsigned long value(const Thing& t)
+  {
+    typename cont_t::iterator i=d_cont.find(t);
+
+    if(i==d_cont.end()) {
+      return 0;
+    }
+    return (unsigned long)i->second;
+  }
+  unsigned long incr(const Thing& t)
+  {
+    typename cont_t::iterator i=d_cont.find(t);
+
+    if(i==d_cont.end()) {
+      d_cont[t]=1;
+      return 1;
+    }
+    else {
+      if (i->second < std::numeric_limits<unsigned long>::max())
+        i->second++;
+      return (unsigned long)i->second;
+   }
+  }
+  unsigned long decr(const Thing& t)
+  {
+    typename cont_t::iterator i=d_cont.find(t);
+
+    if(i!=d_cont.end() && --i->second == 0) {
+      d_cont.erase(i);
+      return 0;
+    } else
+      return (unsigned long)i->second;
+  }
+  void clear(const Thing& t)
+  {
+    typename cont_t::iterator i=d_cont.find(t);
+
+    if(i!=d_cont.end()) {
+      d_cont.erase(i);
+    }
+  }
+  size_t size()
+  {
+    return d_cont.size();
+  }
+private:
+  typedef map<Thing,unsigned long> cont_t;
+  cont_t d_cont;
+};
+
 
 class SyncRes : public boost::noncopyable
 {
@@ -225,16 +281,15 @@ public:
   
   static void doEDNSDumpAndClose(int fd);
 
-  static unsigned int s_queries;
-  static unsigned int s_outgoingtimeouts;
-  static unsigned int s_throttledqueries;
-  static unsigned int s_dontqueries;
-  static unsigned int s_outqueries;
-  static unsigned int s_tcpoutqueries;
-  static unsigned int s_nodelegated;
-  static unsigned int s_unreachables;
-  static bool s_doAAAAAdditionalProcessing;
-  static bool s_doAdditionalProcessing;
+  static uint64_t s_queries;
+  static uint64_t s_outgoingtimeouts;
+  static uint64_t s_throttledqueries;
+  static uint64_t s_dontqueries;
+  static uint64_t s_outqueries;
+  static uint64_t s_tcpoutqueries;
+  static uint64_t s_nodelegated;
+  static uint64_t s_unreachables;
+  static unsigned int s_minimumTTL;
   static bool s_doIPv6;
   unsigned int d_outqueries;
   unsigned int d_tcpoutqueries;
@@ -348,12 +403,16 @@ public:
   
 
   typedef Throttle<tuple<ComboAddress,string,uint16_t> > throttle_t;
+
+  typedef Counters<ComboAddress> fails_t;
   
   struct timeval d_now;
   static unsigned int s_maxnegttl;
   static unsigned int s_maxcachettl;
   static unsigned int s_packetcachettl;
   static unsigned int s_packetcacheservfailttl;
+  static unsigned int s_serverdownmaxfails;
+  static unsigned int s_serverdownthrottletime;
   static bool s_nopacketcache;
   static string s_serverID;
   
@@ -363,6 +422,7 @@ public:
     nsspeeds_t nsSpeeds;
     ednsstatus_t ednsstatus;
     throttle_t throttle;
+    fails_t fails;
     domainmap_t* domainmap;
   };
 
@@ -376,7 +436,6 @@ private:
   bool doCNAMECacheCheck(const string &qname, const QType &qtype, vector<DNSResourceRecord>&ret, int depth, int &res);
   bool doCacheCheck(const string &qname, const QType &qtype, vector<DNSResourceRecord>&ret, int depth, int &res);
   void getBestNSFromCache(const string &qname, set<DNSResourceRecord>&bestns, bool* flawedNSSet, int depth, set<GetBestNSAnswer>& beenthere);
-  void addCruft(const string &qname, vector<DNSResourceRecord>& ret);
   string getBestNSNamesFromCache(const string &qname,set<string, CIStringCompare>& nsset, bool* flawedNSSet, int depth, set<GetBestNSAnswer>&beenthere);
   void addAuthorityRecords(const string& qname, vector<DNSResourceRecord>& ret, int depth);
 
@@ -413,12 +472,12 @@ extern __thread SyncRes::StaticStorage* t_sstorage;
 class Socket;
 /* external functions, opaque to us */
 int asendtcp(const string& data, Socket* sock);
-int arecvtcp(string& data, int len, Socket* sock);
+int arecvtcp(string& data, int len, Socket* sock, bool incompleteOkay);
 
 
 struct PacketID
 {
-  PacketID() : id(0), type(0), sock(0), inNeeded(0), outPos(0), nearMisses(0), fd(-1)
+  PacketID() : id(0), type(0), sock(0), inNeeded(0), inIncompleteOkay(false), outPos(0), nearMisses(0), fd(-1)
   {
     memset(&remote, 0, sizeof(remote));
   }
@@ -431,6 +490,7 @@ struct PacketID
   Socket* sock;  // or wait for an event on a TCP fd
   int inNeeded; // if this is set, we'll read until inNeeded bytes are read
   string inMSG; // they'll go here
+  bool inIncompleteOkay;
 
   string outMSG; // the outgoing message that needs to be sent
   string::size_type outPos;    // how far we are along in the outMSG
@@ -477,19 +537,19 @@ extern __thread RecursorPacketCache* t_packetCache;
 typedef MTasker<PacketID,string> MT_t;
 extern __thread MT_t* MT;
 
-
 struct RecursorStats
 {
   uint64_t servFails;
   uint64_t nxDomains;
   uint64_t noErrors;
   uint64_t answers0_1, answers1_10, answers10_100, answers100_1000, answersSlow;
-  uint64_t avgLatencyUsec;
-  uint64_t qcounter;
+  double avgLatencyUsec;
+  uint64_t qcounter;     // not increased for unauth packets
   uint64_t ipv6qcounter;
   uint64_t tcpqcounter;
-  uint64_t unauthorizedUDP;
-  uint64_t unauthorizedTCP;
+  uint64_t unauthorizedUDP;  // when this is increased, qcounter isn't
+  uint64_t unauthorizedTCP;  // when this is increased, qcounter isn't
+  uint64_t policyDrops;
   uint64_t tcpClientOverflow;
   uint64_t clientParseError;
   uint64_t serverParseError;
@@ -548,6 +608,7 @@ struct RemoteKeeper
   }
 };
 extern __thread RemoteKeeper* t_remotes;
+extern __thread NetmaskGroup* t_allowFrom;
 string doQueueReloadLuaScript(vector<string>::const_iterator begin, vector<string>::const_iterator end);
 string doTraceRegex(vector<string>::const_iterator begin, vector<string>::const_iterator end);
 void parseACLs();
@@ -559,7 +620,7 @@ ComboAddress parseIPAndPort(const std::string& input, uint16_t port);
 ComboAddress getQueryLocalAddress(int family, uint16_t port);
 typedef boost::function<void*(void)> pipefunc_t;
 void broadcastFunction(const pipefunc_t& func, bool skipSelf = false);
-void distributeAsyncFunction(const pipefunc_t& func);
+void distributeAsyncFunction(const std::string& question, const pipefunc_t& func);
 
 int directResolve(const std::string& qname, const QType& qtype, int qclass, vector<DNSResourceRecord>& ret);
 
@@ -578,5 +639,5 @@ uint64_t* pleaseGetPacketCacheHits();
 uint64_t* pleaseGetPacketCacheSize();
 uint64_t* pleaseWipeCache(const std::string& canon);
 uint64_t* pleaseWipeAndCountNegCache(const std::string& canon);
-
+void doCarbonDump(void*);
 #endif

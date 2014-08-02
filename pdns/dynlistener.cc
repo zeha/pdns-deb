@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -72,7 +76,7 @@ void DynListener::createSocketAndBind(int family, struct sockaddr*local, size_t 
   
   int tmp=1;
   if(setsockopt(d_s,SOL_SOCKET,SO_REUSEADDR,(char*)&tmp,sizeof tmp)<0)
-    throw AhuException(string("Setsockopt failed on control socket: ")+strerror(errno));
+    throw PDNSException(string("Setsockopt failed on control socket: ")+strerror(errno));
     
   if(bind(d_s, local, len) < 0) {
     if (family == AF_UNIX)
@@ -94,9 +98,10 @@ bool DynListener::testLive(const string& fname)
     return false;
   }
 
-  memset(&addr, 0, sizeof(addr));
-  addr.sun_family = AF_UNIX;
-  strncpy(addr.sun_path, fname.c_str(), fname.length());
+  if (makeUNsockaddr(fname, &addr)) {
+    L<<Logger::Critical<<"Unable to open controlsocket, path '"<<fname<<"' is not a valid UNIX socket path."<<endl;
+    exit(1);
+  }
 
   int status = connect(fd, (struct sockaddr*)&addr, sizeof(addr));
   close(fd);
@@ -116,9 +121,10 @@ void DynListener::listenOnUnixDomain(const string& fname)
   }
 
   struct sockaddr_un local;
-  memset(&local,0,sizeof(local));
-  local.sun_family=AF_UNIX;
-  strncpy(local.sun_path, fname.c_str(), fname.length());
+  if (makeUNsockaddr(fname, &local)) {
+    L<<Logger::Critical<<"Unable to bind to controlsocket, path '"<<fname<<"' is not a valid UNIX socket path."<<endl;
+    exit(1);
+  }
   
   createSocketAndBind(AF_UNIX, (struct sockaddr*)& local, sizeof(local));
   d_socketname=fname;
@@ -145,16 +151,8 @@ void DynListener::listenOnTCP(const ComboAddress& local)
   d_nonlocal=true;
 
   if(!::arg()["tcp-control-range"].empty()) {
-    vector<string> ips;
-    stringtok(ips, ::arg()["tcp-control-range"], ", ");
-    L<<Logger::Warning<<"Only allowing TCP control from: ";
-    for(vector<string>::const_iterator i = ips.begin(); i!= ips.end(); ++i) {
-      d_tcprange.addMask(*i);
-      if(i!=ips.begin())
-        L<<Logger::Warning<<", ";
-      L<<Logger::Warning<<*i;
-    }
-    L<<Logger::Warning<<endl;
+    d_tcprange.toMasks(::arg()["tcp-control-range"]);
+    L<<Logger::Warning<<"Only allowing TCP control from: "<<d_tcprange.toString()<<endl;
   }
 }
 
@@ -197,6 +195,8 @@ void *DynListener::theListenerHelper(void *p)
   DynListener *us=static_cast<DynListener *>(p);
   us->theListener();
   L<<Logger::Error<<"Control listener aborted, please file a bug!"<<endl;
+  L<<Logger::Error<<"Taking down the Parent PGRP ("<<getpgid(us->d_ppid)<<") with it"<<endl;
+  kill(-getpgid(us->d_ppid),SIGKILL);
   return 0;
 }
 
@@ -219,7 +219,7 @@ string DynListener::getLine()
         continue;
       }
 
-      if(d_tcp && !d_tcprange.match(&remote)) { // ????
+      if(d_tcp && !d_tcprange.match(&remote)) { // checks if the remote is within the permitted range.
         L<<Logger::Error<<"Access denied to remote "<<remote.toString()<<" because not allowed"<<endl;
         writen2(d_client, "Access denied to "+remote.toString()+"\n");
         close(d_client);
@@ -246,7 +246,7 @@ string DynListener::getLine()
       errno=0;
       if(!fgets(&mesg[0], mesg.size(), fp.get())) {
         if(errno)
-	  L<<Logger::Error<<"Unable to receive line from controlsocket ("<<d_client<<"): "<<strerror(errno)<<endl;
+          L<<Logger::Error<<"Unable to receive line from controlsocket ("<<d_client<<"): "<<strerror(errno)<<endl;
         close(d_client);
         continue;
       }
@@ -262,22 +262,22 @@ string DynListener::getLine()
   else {
     if(isatty(0))
       if(write(1, "% ", 2) !=2)
-        throw AhuException("Writing to console: "+stringerror());
+        throw PDNSException("Writing to console: "+stringerror());
     if((len=read(0, &mesg[0], mesg.size())) < 0) 
-      throw AhuException("Reading from the control pipe: "+stringerror());
+      throw PDNSException("Reading from the control pipe: "+stringerror());
     else if(len==0)
-      throw AhuException("Guardian exited - going down as well");
+      throw PDNSException("Guardian exited - going down as well");
 
-    if(len == (int)mesg.size()) {
-      throw AhuException("Line on control console was too long");
-    }
+    if(len == (int)mesg.size())
+      throw PDNSException("Line on control console was too long");
+
     mesg[len]=0;
   }
   
   return &mesg[0];
 }
 
-void DynListener::sendLine(const string &l)
+void DynListener::sendlines(const string &l)
 {
   if(d_nonlocal) {
     unsigned int sent=0;
@@ -292,15 +292,14 @@ void DynListener::sendLine(const string &l)
       sent+=ret;
     }
     close(d_client);
-  }
-  else {
-    string line=l;
-    if(!line.empty() && line[line.length()-1]!='\n')
-      line.append("\n");
-    line.append("\n");
-    if((unsigned int)write(1,line.c_str(),line.length()) != line.length())
+  } else {
+    string lines=l;
+    if(!lines.empty() && lines[lines.length()-1] != '\n')
+      lines.append("\n");
+    lines.append(1, '\0');
+    lines.append(1, '\n');
+    if((unsigned int)write(1, lines.c_str(), lines.length()) != lines.length())
       L<<Logger::Error<<"Error sending data to console: "<<stringerror()<<endl;
-      
   }
 }
 
@@ -318,50 +317,56 @@ void DynListener::registerRestFunc(g_funk_t *gf)
 void DynListener::theListener()
 {
   try {
-    map<string,string> parameters;
     signal(SIGPIPE,SIG_IGN);
 
     for(int n=0;;++n) {
-      //      cerr<<"Reading new line, "<<d_client<<endl;
       string line=getLine();
       boost::trim_right(line);
 
       vector<string>parts;
       stringtok(parts,line," ");
       if(parts.empty()) {
-        sendLine("Empty line");
-        continue;
-      }
-      parts[0] = toUpper( parts[0] );
-      if(!s_funcdb.count(parts[0])) {
-        if(parts[0] == "HELP")
-          sendLine(getHelp());
-        else if(s_restfunc)
-          sendLine((*s_restfunc)(parts,d_ppid));
-        else
-          sendLine("Unknown command: '"+parts[0]+"'");
+        sendlines("Empty line");
         continue;
       }
 
-      sendLine((*(s_funcdb[parts[0]].func))(parts,d_ppid));
+      try {
+        parts[0] = toUpper( parts[0] );
+        if(s_funcdb.count(parts[0]))
+          sendlines((*(s_funcdb[parts[0]].func))(parts,d_ppid));
+        else if (parts[0] == "HELP")
+          sendlines(getHelp());
+        else if(s_restfunc)
+          sendlines((*s_restfunc)(parts,d_ppid));
+        else
+          sendlines("Unknown command: '"+parts[0]+"'");
+      }
+      catch(PDNSException &AE) {
+        L<<Logger::Error<<"Non-fatal error in control listener command '"<<line<<"': "<<AE.reason<<endl;
+      }
+      catch(string &E) {
+        L<<Logger::Error<<"Non-fatal error 2 in control listener command '"<<line<<"': "<<E<<endl;
+      }
+      catch(std::exception& e) {
+        L<<Logger::Error<<"Non-fatal STL error in control listener command '"<<line<<"': "<<e.what()<<endl;
+      }
+      catch(...) {
+        L<<Logger::Error<<"Non-fatal error in control listener command '"<<line<<"': unknown exception occurred"<<endl;
+      }
     }
   }
-  catch(AhuException &AE)
-    {
-      L<<Logger::Error<<"Fatal error in control listener: "<<AE.reason<<endl;
-    }
-  catch(string &E)
-    {
-      L<<Logger::Error<<"Fatal error 2 in control listener: "<<E<<endl;
-    }
-  catch(std::exception& e)
-    {
-      L<<Logger::Error<<"Fatal STL error: "<<e.what()<<endl;
-    }
-  catch(...)
-    {
-      L<<Logger::Error<<"Fatal: unknown exception occured"<<endl;
-    }
+  catch(PDNSException &AE) {
+    L<<Logger::Error<<"Fatal error in control listener: "<<AE.reason<<endl;
+  }
+  catch(string &E) {
+    L<<Logger::Error<<"Fatal error 2 in control listener: "<<E<<endl;
+  }
+  catch(std::exception& e) {
+    L<<Logger::Error<<"Fatal STL error in control listener: "<<e.what()<<endl;
+  }
+  catch(...) {
+    L<<Logger::Error<<"Fatal: unknown exception in control listener occurred"<<endl;
+  }
 }
 
 
@@ -383,8 +388,7 @@ string DynListener::getHelp()
 
   const boost::format fmter("%|-32| %||");
 
-  for(g_funkdb_t::const_iterator i=s_funcdb.begin();i!=s_funcdb.end();++i)
-  {
+  for(g_funkdb_t::const_iterator i=s_funcdb.begin();i!=s_funcdb.end();++i) {
     funcs.push_back(str(boost::format(fmter) % (toLower(i->first)+" "+i->second.args) % i->second.usage));
   }
   sort(funcs.begin(), funcs.end());
@@ -393,4 +397,3 @@ string DynListener::getHelp()
   funcs.resize(unique(funcs.begin(), funcs.end()) - funcs.begin());
   return boost::join(funcs, "\n");
 }
-

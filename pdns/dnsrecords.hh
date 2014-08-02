@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -196,6 +200,16 @@ public:
 private:
   string d_content;
 };
+
+class DNAMERecordContent : public DNSRecordContent
+{
+public:
+  includeboilerplate(DNAME)
+
+private:
+  string d_content;
+};
+
 
 class MRRecordContent : public DNSRecordContent
 {
@@ -553,10 +567,12 @@ void RNAME##RecordContent::toPacket(DNSPacketWriter& pw)                        
 void RNAME##RecordContent::report(void)                                                            \
 {                                                                                                  \
   regist(1, RTYPE, &RNAME##RecordContent::make, &RNAME##RecordContent::make, #RNAME);              \
+  regist(254, RTYPE, &RNAME##RecordContent::make, &RNAME##RecordContent::make, #RNAME);            \
 }                                                                                                  \
 void RNAME##RecordContent::unreport(void)                                                          \
 {                                                                                                  \
   unregist(1, RTYPE);                                                                              \
+  unregist(254, RTYPE);                                                                            \
 }                                                                                                  \
                                                                                                    \
 RNAME##RecordContent::RNAME##RecordContent(const string& zoneData) : DNSRecordContent(RTYPE)       \
@@ -585,6 +601,7 @@ template<class Convertor>                                         \
 void RNAME##RecordContent::xfrPacket(Convertor& conv)             \
 {                                                                 \
   CONV;                                                           \
+  if (conv.eof() == false) throw MOADNSException("All data was not consumed"); \
 }                                                                 \
 
 struct EDNSOpts

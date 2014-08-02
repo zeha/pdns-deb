@@ -6,6 +6,9 @@
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
     
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -44,24 +47,6 @@ using namespace ::boost::multi_index;
     first marks and then sweeps, a second lock is present to prevent simultaneous inserts and deletes.
 */
 
-struct CIBackwardsStringCompare: public std::binary_function<string, string, bool>  
-{
-  bool operator()(const string& str_a, const string& str_b) const
-  {
-    string::const_reverse_iterator ra, rb;
-    char a=0, b=0;
-    for(ra = str_a.rbegin(), rb = str_b.rbegin();
-        ra < str_a.rend() && rb < str_b.rend() && (a=dns_tolower(*ra)) == (b=dns_tolower(*rb));
-        ra++, rb++);
-    
-    if (ra < str_a.rend() && rb==str_b.rend()) { a=*(ra++); b=0; return false; } // we are at the beginning of b -> b smaller
-    if (rb < str_b.rend() && ra==str_a.rend()) { b=*(rb++); a=0; return true; } // we are at the beginning of a -> a smaller
-    // if BOTH are at their ends, a and b will be equal, and we should return false, which we will
-    return a < b;
-  }
-};
-
-
 class PacketCache : public boost::noncopyable
 {
 public:
@@ -69,14 +54,14 @@ public:
   ~PacketCache();
   enum CacheEntryType { PACKETCACHE, QUERYCACHE};
 
-  void insert(DNSPacket *q, DNSPacket *r, unsigned int maxttl=UINT_MAX);  //!< We copy the contents of *p into our cache. Do not needlessly call this to insert questions already in the cache as it wastes resources
+  void insert(DNSPacket *q, DNSPacket *r, bool recursive, unsigned int maxttl=UINT_MAX);  //!< We copy the contents of *p into our cache. Do not needlessly call this to insert questions already in the cache as it wastes resources
 
   void insert(const string &qname, const QType& qtype, CacheEntryType cet, const string& value, unsigned int ttl, int zoneID=-1, bool meritsRecursion=false,
     unsigned int maxReplyLen=512, bool dnssecOk=false, bool EDNS=false);
 
-  int get(DNSPacket *p, DNSPacket *q); //!< We return a dynamically allocated copy out of our cache. You need to delete it. You also need to spoof in the right ID with the DNSPacket.spoofID() method.
-  bool getEntry(const string &content, const QType& qtype, CacheEntryType cet, string& entry, int zoneID=-1, 
-    bool meritsRecursion=false, unsigned int maxReplyLen=512, bool dnssecOk=false, bool hasEDNS=false);
+  int get(DNSPacket *p, DNSPacket *q, bool recursive); //!< We return a dynamically allocated copy out of our cache. You need to delete it. You also need to spoof in the right ID with the DNSPacket.spoofID() method.
+  bool getEntry(const string &content, const QType& qtype, CacheEntryType cet, string& entry, int zoneID=-1,
+    bool meritsRecursion=false, unsigned int maxReplyLen=512, bool dnssecOk=false, bool hasEDNS=false, unsigned int *age=0);
 
   int size(); //!< number of entries in the cache
   void cleanup(); //!< force the cache to preen itself from expired packets
@@ -85,8 +70,9 @@ public:
 
   map<char,int> getCounts();
 private:
-  bool getEntryLocked(const string &content, const QType& qtype, CacheEntryType cet, string& entry, int zoneID=-1, 
-    bool meritsRecursion=false, unsigned int maxReplyLen=512, bool dnssecOk=false, bool hasEDNS=false);
+  bool getEntryLocked(const string &content, const QType& qtype, CacheEntryType cet, string& entry, int zoneID=-1,
+    bool meritsRecursion=false, unsigned int maxReplyLen=512, bool dnssecOk=false, bool hasEDNS=false, unsigned int *age=0);
+  string pcReverse(const string &content);
   struct CacheEntry
   {
     CacheEntry() { qtype = ctype = 0; zoneID = -1; meritsRecursion=false; dnssecOk=false; hasEDNS=false;}
@@ -95,6 +81,7 @@ private:
     uint16_t qtype;
     uint16_t ctype;
     int zoneID;
+    time_t created;
     time_t ttd;
     bool meritsRecursion;
     unsigned int maxReplyLen;
@@ -120,7 +107,7 @@ private:
                         member<CacheEntry,bool, &CacheEntry::dnssecOk>,
                         member<CacheEntry,bool, &CacheEntry::hasEDNS>
                         >,
-                        composite_key_compare<CIBackwardsStringCompare, std::less<uint16_t>, std::less<uint16_t>, std::less<int>, std::less<bool>, 
+                        composite_key_compare<std::less<string>, std::less<uint16_t>, std::less<uint16_t>, std::less<int>, std::less<bool>, 
                           std::less<unsigned int>, std::less<bool>, std::less<bool> >
                             >,
                            sequenced<>

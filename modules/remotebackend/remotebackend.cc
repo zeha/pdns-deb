@@ -68,10 +68,8 @@ RemoteBackend::~RemoteBackend() {
 bool RemoteBackend::send(rapidjson::Document &value) {
    try {
      return connector->send(value);
-   } catch (AhuException &ex) {
+   } catch (PDNSException &ex) {
      L<<Logger::Error<<"Exception caught when sending: "<<ex.reason<<std::endl;
-   } catch (...) {
-     L<<Logger::Error<<"Exception caught when sending"<<std::endl;
    }
 
    delete this->connector;
@@ -82,7 +80,7 @@ bool RemoteBackend::send(rapidjson::Document &value) {
 bool RemoteBackend::recv(rapidjson::Document &value) {
    try {
      return connector->recv(value);
-   } catch (AhuException &ex) {
+   } catch (PDNSException &ex) {
      L<<Logger::Error<<"Exception caught when receiving: "<<ex.reason<<std::endl;
    } catch (...) {
      L<<Logger::Error<<"Exception caught when receiving"<<std::endl;;
@@ -108,7 +106,7 @@ int RemoteBackend::build() {
       size_t pos;
       pos = d_connstr.find_first_of(":");
       if (pos == std::string::npos)
-         throw AhuException("Invalid connection string: malformed");
+         throw PDNSException("Invalid connection string: malformed");
 
       type = d_connstr.substr(0, pos);
       opts = d_connstr.substr(pos+1);
@@ -139,15 +137,17 @@ int RemoteBackend::build() {
       if (type == "unix") {
         this->connector = new UnixsocketConnector(options);
       } else if (type == "http") {
-#ifdef REMOTEBACKEND_HTTP
         this->connector = new HTTPConnector(options);
+      } else if (type == "zeromq") {
+#ifdef REMOTEBACKEND_ZEROMQ
+        this->connector = new ZeroMQConnector(options);
 #else
-	throw AhuException("Invalid connection string: http connector support not enabled. Recompile with --enable-remotebackend-http");
+        throw PDNSException("Invalid connection string: zeromq connector support not enabled. Recompile with --enable-remotebackend-zeromq");
 #endif
       } else if (type == "pipe") {
         this->connector = new PipeConnector(options);
       } else {
-        throw AhuException("Invalid connection string: unknown connector");
+        throw PDNSException("Invalid connection string: unknown connector");
       }
 
       return -1;
@@ -162,7 +162,7 @@ void RemoteBackend::lookup(const QType &qtype, const std::string &qdomain, DNSPa
    rapidjson::Value parameters;
 
    if (d_index != -1) 
-      throw AhuException("Attempt to lookup while one running");
+      throw PDNSException("Attempt to lookup while one running");
 
    query.SetObject();
    JSON_ADD_MEMBER(query, "method", "lookup", query.GetAllocator())
@@ -201,12 +201,12 @@ void RemoteBackend::lookup(const QType &qtype, const std::string &qdomain, DNSPa
    d_index = 0;
 }
 
-bool RemoteBackend::list(const std::string &target, int domain_id) {
+bool RemoteBackend::list(const std::string &target, int domain_id, bool include_disabled) {
    rapidjson::Document query;
    rapidjson::Value parameters;
 
    if (d_index != -1)
-      throw AhuException("Attempt to lookup while one running");
+      throw PDNSException("Attempt to lookup while one running");
 
    query.SetObject();
    JSON_ADD_MEMBER(query, "method", "list", query.GetAllocator());
@@ -284,7 +284,40 @@ bool RemoteBackend::getBeforeAndAfterNamesAbsolute(uint32_t id, const std::strin
    unhashed = getString(answer["result"]["unhashed"]);
    before = getString(answer["result"]["before"]);
    after = getString(answer["result"]["after"]);
-  
+ 
+   return true;
+}
+
+bool RemoteBackend::getAllDomainMetadata(const string& name, std::map<std::string, std::vector<std::string> >& meta) {
+   rapidjson::Document query,answer;
+   rapidjson::Value parameters;
+
+   query.SetObject();
+   JSON_ADD_MEMBER(query, "method", "getAllDomainMetadata", query.GetAllocator());
+   parameters.SetObject();
+   JSON_ADD_MEMBER(parameters, "name", name.c_str(), query.GetAllocator());
+   query.AddMember("parameters", parameters, query.GetAllocator());
+
+   if (this->send(query) == false)
+     return false;
+
+   meta.clear();
+
+   // not mandatory to implement
+   if (this->recv(answer) == false)
+     return true;
+
+   if (answer["result"].IsObject()) {
+     for (rapidjson::Value::MemberIterator kind = answer["result"].MemberBegin(); kind != answer["result"].MemberEnd(); kind++) {
+       if (kind->value.IsArray()) {
+         for(rapidjson::Value::ValueIterator content = kind->value.Begin(); content != kind->value.End(); content++)
+           meta[kind->name.GetString()].push_back(getString(*content));
+       } else {
+         meta[kind->name.GetString()].push_back(getString(kind->value));
+       }
+     }
+   }
+
    return true;
 }
 
@@ -361,6 +394,15 @@ bool RemoteBackend::getDomainKeys(const std::string& name, unsigned int kind, st
 
    for(rapidjson::Value::ValueIterator iter = answer["result"].Begin(); iter != answer["result"].End(); iter++) {
       DNSBackend::KeyData key;
+      if (!(*iter).IsObject())
+        throw PDNSException("Invalid reply to getDomainKeys, expected array of hashes, got something else");
+
+      if (!(*iter).HasMember("id") ||
+          !(*iter).HasMember("flags") ||
+          !(*iter).HasMember("active") ||
+          !(*iter).HasMember("content"))
+        throw PDNSException("Invalid reply to getDomainKeys, missing keys in key hash");
+
       key.id = getUInt((*iter)["id"]);
       key.flags = getUInt((*iter)["flags"]);
       key.active = getBool((*iter)["active"]);
@@ -472,11 +514,86 @@ bool RemoteBackend::getTSIGKey(const std::string& name, std::string* algorithm, 
    if (this->send(query) == false || this->recv(answer) == false)
      return false;
 
-   if (algorithm != NULL)
-     algorithm->assign(getString(answer["result"]["algorithm"]));
-   if (content != NULL)
-     content->assign(getString(answer["result"]["content"]));
+   if (!answer["result"].IsObject() ||
+       !answer["result"].HasMember("algorithm") ||
+       !answer["result"].HasMember("content")) 
+     throw PDNSException("Invalid response to getTSIGKey, missing field(s)");
+
+   algorithm->assign(getString(answer["result"]["algorithm"]));
+   content->assign(getString(answer["result"]["content"]));
    
+   return true;
+}
+
+bool RemoteBackend::setTSIGKey(const std::string& name, const std::string& algorithm, const std::string& content) {
+   rapidjson::Document query,answer;
+   rapidjson::Value parameters;
+
+   // no point doing dnssec if it's not supported
+   if (d_dnssec == false) return false;
+   query.SetObject();
+   JSON_ADD_MEMBER(query, "method", "setTSIGKey", query.GetAllocator());
+   parameters.SetObject();
+   JSON_ADD_MEMBER(parameters, "name", name.c_str(), query.GetAllocator());
+   JSON_ADD_MEMBER(parameters, "algorithm", algorithm.c_str(), query.GetAllocator());
+   JSON_ADD_MEMBER(parameters, "content", content.c_str(), query.GetAllocator());
+   query.AddMember("parameters", parameters, query.GetAllocator());
+   if (connector->send(query) == false || connector->recv(answer) == false)
+     return false;
+
+   return true;
+}
+
+bool RemoteBackend::deleteTSIGKey(const std::string& name) {
+   rapidjson::Document query,answer;
+   rapidjson::Value parameters;
+
+   // no point doing dnssec if it's not supported
+   if (d_dnssec == false) return false;
+   query.SetObject();
+   JSON_ADD_MEMBER(query, "method", "deleteTSIGKey", query.GetAllocator());
+   parameters.SetObject();
+   JSON_ADD_MEMBER(parameters, "name", name.c_str(), query.GetAllocator());
+   query.AddMember("parameters", parameters, query.GetAllocator());
+   if (connector->send(query) == false || connector->recv(answer) == false)
+     return false;
+
+   return true;
+}
+
+bool RemoteBackend::getTSIGKeys(std::vector<struct TSIGKey>& keys) {
+   rapidjson::Document query,answer;
+   rapidjson::Value parameters;
+
+   // no point doing dnssec if it's not supported
+   if (d_dnssec == false) return false;
+   query.SetObject();
+   JSON_ADD_MEMBER(query, "method", "getTSIGKeys", query.GetAllocator());
+   parameters.SetObject();
+   query.AddMember("parameters", parameters, query.GetAllocator());
+
+   if (connector->send(query) == false || connector->recv(answer) == false)
+     return false;
+
+   // expect array
+   if (answer["result"].IsArray()) {
+      for(rapidjson::Value::ValueIterator iter = answer["result"].Begin(); iter != answer["result"].End(); iter++) {
+         struct TSIGKey key;
+         rapidjson::Value value;
+         value = "";
+         key.name = getString(JSON_GET((*iter), "name", value));
+         key.algorithm = getString(JSON_GET((*iter), "algorithm", value));
+         key.key = getString(JSON_GET((*iter), "content", value));
+
+         if (key.name.empty() ||
+             key.algorithm.empty() ||
+             key.key.empty())
+           throw PDNSException("Invalid reply for getTSIGKeys query");
+
+         keys.push_back(key);
+      }
+   }
+
    return true;
 }
 
@@ -496,9 +613,9 @@ bool RemoteBackend::getDomainInfo(const string &domain, DomainInfo &di) {
      return false;
 
    // make sure we got zone & kind
-   if (!answer["result"].HasMember("zone")) {
+   if (!answer["result"].IsObject() || !answer["result"].HasMember("zone")) {
       L<<Logger::Error<<kBackendId<<"Missing zone in getDomainInfo return value"<<endl;
-      throw AhuException();
+      throw PDNSException();
    }
    value = -1;
    // parse return value. we need at least zone,serial,kind
@@ -544,7 +661,24 @@ void RemoteBackend::setNotified(uint32_t id, uint32_t serial) {
    }
 }
 
-bool RemoteBackend::superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *account, DNSBackend **ddb) 
+bool RemoteBackend::isMaster(const string &name, const string &ip)
+{
+   rapidjson::Document query,answer;
+   rapidjson::Value parameters;
+
+   query.SetObject();
+   JSON_ADD_MEMBER(query, "method", "isMaster", query.GetAllocator());
+   parameters.SetObject();
+   JSON_ADD_MEMBER(parameters, "name", name.c_str(), query.GetAllocator());
+   JSON_ADD_MEMBER(parameters, "ip", ip.c_str(), query.GetAllocator());
+   query.AddMember("parameters", parameters, query.GetAllocator());
+   if (this->send(query) == false || this->recv(answer) == false)
+     return false;
+
+   return true;
+}
+
+bool RemoteBackend::superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *nameserver, string *account, DNSBackend **ddb) 
 {
    rapidjson::Document query,answer;
    rapidjson::Value parameters;
@@ -587,7 +721,7 @@ bool RemoteBackend::superMasterBackend(const string &ip, const string &domain, c
    return true;
 }
 
-bool RemoteBackend::createSlaveDomain(const string &ip, const string &domain, const string &account) {
+bool RemoteBackend::createSlaveDomain(const string &ip, const string &domain, const string &nameserver, const string &account) {
    rapidjson::Document query,answer;
    rapidjson::Value parameters;
    query.SetObject();
@@ -668,7 +802,7 @@ bool RemoteBackend::feedRecord(const DNSResourceRecord &rr, string *ordername) {
    return true; // XXX FIXME this API should not return 'true' I think -ahu
 }
 
-bool RemoteBackend::feedEnts(int domain_id, set<string>& nonterm) {
+bool RemoteBackend::feedEnts(int domain_id, map<string,bool>& nonterm) {
    rapidjson::Document query,answer;
    rapidjson::Value parameters;
    rapidjson::Value nts;
@@ -678,8 +812,9 @@ bool RemoteBackend::feedEnts(int domain_id, set<string>& nonterm) {
    JSON_ADD_MEMBER(parameters, "domain_id", domain_id, query.GetAllocator());
    JSON_ADD_MEMBER(parameters, "trxid", d_trxid, query.GetAllocator());
    nts.SetArray();
-   BOOST_FOREACH(const string &t, nonterm) {
-      nts.PushBack(t.c_str(), query.GetAllocator());
+   pair<string,bool> t;
+   BOOST_FOREACH(t, nonterm) {
+      nts.PushBack(t.first.c_str(), query.GetAllocator());
    }
    parameters.AddMember("nonterm", nts, query.GetAllocator());
    query.AddMember("parameters", parameters, query.GetAllocator());
@@ -689,7 +824,7 @@ bool RemoteBackend::feedEnts(int domain_id, set<string>& nonterm) {
    return true; 
 }
 
-bool RemoteBackend::feedEnts3(int domain_id, const string &domain, set<string> &nonterm, unsigned int times, const string &salt, bool narrow) {
+bool RemoteBackend::feedEnts3(int domain_id, const string &domain, map<string,bool> &nonterm, unsigned int times, const string &salt, bool narrow) {
    rapidjson::Document query,answer;
    rapidjson::Value parameters;
    rapidjson::Value nts;
@@ -704,8 +839,9 @@ bool RemoteBackend::feedEnts3(int domain_id, const string &domain, set<string> &
    JSON_ADD_MEMBER(parameters, "trxid", d_trxid, query.GetAllocator());
 
    nts.SetArray();
-   BOOST_FOREACH(const string &t, nonterm) {
-      nts.PushBack(t.c_str(), query.GetAllocator());
+   pair<string,bool> t;
+   BOOST_FOREACH(t, nonterm) {
+      nts.PushBack(t.first.c_str(), query.GetAllocator());
    }
    parameters.AddMember("nonterm", nts, query.GetAllocator());
    query.AddMember("parameters", parameters, query.GetAllocator());
@@ -811,7 +947,7 @@ bool RemoteBackend::getBool(rapidjson::Value &value) {
      if (boost::iequals(tmp, "0") || boost::iequals(tmp, "false")) return false;
    }
    std::cerr << value.GetType() << endl;
-   throw new AhuException("Cannot convert rapidjson value into boolean");
+   throw PDNSException("Cannot convert rapidjson value into boolean");
 }
 
 bool Connector::getBool(rapidjson::Value &value) {
@@ -847,7 +983,7 @@ int RemoteBackend::getInt(rapidjson::Value &value) {
      std::string tmp = value.GetString();
      return boost::lexical_cast<int>(tmp);
    }
-   throw new AhuException("Cannot convert rapidjson value into integer");
+   throw PDNSException("Cannot convert rapidjson value into integer");
 }
 
 unsigned int RemoteBackend::getUInt(rapidjson::Value &value) {
@@ -859,7 +995,7 @@ unsigned int RemoteBackend::getUInt(rapidjson::Value &value) {
      std::string tmp = value.GetString();
      return boost::lexical_cast<unsigned int>(tmp);
    }
-   throw new AhuException("Cannot convert rapidjson value into integer");
+   throw PDNSException("Cannot convert rapidjson value into integer");
 }
 
 int64_t RemoteBackend::getInt64(rapidjson::Value &value) {
@@ -871,16 +1007,17 @@ int64_t RemoteBackend::getInt64(rapidjson::Value &value) {
      std::string tmp = value.GetString();
      return boost::lexical_cast<int64_t>(tmp);
    }
-   throw new AhuException("Cannot convert rapidjson value into integer");
+   throw PDNSException("Cannot convert rapidjson value into integer");
 }
 
 std::string RemoteBackend::getString(rapidjson::Value &value) {
+   if (value.IsNull()) return "";
    if (value.IsString()) return value.GetString();
    if (value.IsBool()) return (value.GetBool() ? "true" : "false");
    if (value.IsInt64()) return boost::lexical_cast<std::string>(value.GetInt64());
    if (value.IsInt()) return boost::lexical_cast<std::string>(value.GetInt());
    if (value.IsDouble()) return boost::lexical_cast<std::string>(value.GetDouble());
-   throw new AhuException("Cannot convert rapidjson value into std::string");
+   throw PDNSException("Cannot convert rapidjson value into std::string");
 }
 
 double RemoteBackend::getDouble(rapidjson::Value &value) {
@@ -892,7 +1029,7 @@ double RemoteBackend::getDouble(rapidjson::Value &value) {
      std::string tmp = value.GetString();
      return boost::lexical_cast<double>(tmp);
    }
-   throw new AhuException("Cannot convert rapidjson value into double");
+   throw PDNSException("Cannot convert rapidjson value into double");
 }
 
 DNSBackend *RemoteBackend::maker()
@@ -931,11 +1068,8 @@ public:
 
 
 RemoteLoader::RemoteLoader() {
-#ifdef REMOTEBACKEND_HTTP
-    curl_global_init(CURL_GLOBAL_ALL);
-#endif
     BackendMakers().report(new RemoteBackendFactory);
-    L<<Logger::Notice<<kBackendId<<" This is the remotebackend version "VERSION" ("__DATE__", "__TIME__") reporting"<<endl;
+    L << Logger::Info << kBackendId << " This is the remote backend version " VERSION " (" __DATE__ ", " __TIME__ ") reporting" << endl;
 }
 
 static RemoteLoader remoteloader;

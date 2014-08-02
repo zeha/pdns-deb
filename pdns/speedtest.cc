@@ -160,7 +160,7 @@ struct MakeARecordTestMM
   void operator()() const
   {
       DNSRecordContent*drc = DNSRecordContent::mastermake(QType::A, 1, 
-        						  "1.2.3.4");
+                                                          "1.2.3.4");
       delete drc;
   }
 };
@@ -234,7 +234,7 @@ struct GenericRecordTest
     for(int records = 0; records < d_records; records++) {
       pw.startRecord("outpost.ds9a.nl", d_type);
       DNSRecordContent*drc = DNSRecordContent::mastermake(d_type, 1, 
-        						  d_content);
+                                                          d_content);
       drc->toPacket(pw);
       delete drc;
     }
@@ -310,7 +310,7 @@ vector<uint8_t> makeRootReferral()
 
   // nobody reads what we output, but it appears to be the magic that shuts some nameservers up
   static const char*ips[]={"198.41.0.4", "192.228.79.201", "192.33.4.12", "199.7.91.13", "192.203.230.10", "192.5.5.241", "192.112.36.4", "128.63.2.53", 
-        	     "192.36.148.17","192.58.128.30", "193.0.14.129", "198.32.64.12", "202.12.27.33"};
+                     "192.36.148.17","192.58.128.30", "193.0.14.129", "199.7.83.42", "202.12.27.33"};
   static char templ[40];
   strncpy(templ,"a.root-servers.net", sizeof(templ) - 1);
   
@@ -541,7 +541,7 @@ struct ParsePacketTest
               rr.content=toLower(rr.content); // this must stay! (the cache can't be case-insensitive on the RHS of records)
             tcache[make_pair(i->qname,i->qtype)].insert(rr);
           }
-        }	  
+        }          
         else
           ; // LOG<<"NO!"<<endl;
       }
@@ -562,7 +562,7 @@ struct ParsePacketTest
       set<string, CIStringCompare> nsset;  
       // LOG<<prefix<<qname<<": determining status after receiving this packet"<<endl;
 
-      bool done=false, realreferral=false, negindic=false;
+      bool done=false;
       string newauth, soaname, newtarget;
       string qname(".");
       vector<DNSResourceRecord> ret;
@@ -586,17 +586,16 @@ struct ParsePacketTest
             // Lock l(&s_negcachelock);
             // replacing_insert(s_negcache, ne);
           }
-          negindic=true;
         }
         else if(i->d_place==DNSResourceRecord::ANSWER && pdns_iequals(i->qname, qname) && i->qtype.getCode()==QType::CNAME && (!(qtype==QType(QType::CNAME)))) {
           ret.push_back(*i);
           newtarget=i->content;
         }
-        // for ANY answers we *must* have an authoritive answer
+        // for ANY answers we *must* have an authoritative answer
         else if(i->d_place==DNSResourceRecord::ANSWER && pdns_iequals(i->qname, qname) && 
-        	(
-        	 i->qtype==qtype || (lwr.d_aabit && (qtype==QType(QType::ANY) || magicAddrMatch(qtype, i->qtype) ) )
-        	) 
+                (
+                 i->qtype==qtype || (lwr.d_aabit && (qtype==QType(QType::ANY) || magicAddrMatch(qtype, i->qtype) ) )
+                ) 
                )   
           {
           
@@ -609,7 +608,6 @@ struct ParsePacketTest
           if(moreSpecificThan(i->qname,auth)) {
             newauth=i->qname;
             // LOG<<prefix<<qname<<": got NS record '"<<i->qname<<"' -> '"<<i->content<<"'"<<endl;
-            realreferral=true;
           }
           else 
             ;// // LOG<<prefix<<qname<<": got upwards/level NS record '"<<i->qname<<"' -> '"<<i->content<<"', had '"<<auth<<"'"<<endl;
@@ -629,7 +627,6 @@ struct ParsePacketTest
            // Lock l(&s_negcachelock);
             // replacing_insert(s_negcache, ne);
           }
-          negindic=true;
         }
       }
 

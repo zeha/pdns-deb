@@ -5,6 +5,11 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -21,7 +26,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h> 
-#include "ahuexception.hh"
+#include "pdnsexception.hh"
 #include "logger.hh"
 #include "misc.hh"
 #include <pwd.h>
@@ -39,18 +44,18 @@
 Semaphore::Semaphore(unsigned int value)
 {
   if (value > SEM_VALUE_MAX) {
-    throw AhuException("Cannot create semaphore: value too large");
+    throw PDNSException("Cannot create semaphore: value too large");
   }
 
   // Initialize
   
   if (pthread_mutex_init(&m_lock, NULL) != 0) {
-    throw AhuException("Cannot create semaphore: cannot allocate mutex");
+    throw PDNSException("Cannot create semaphore: cannot allocate mutex");
   }
 
   if (pthread_cond_init(&m_gtzero, NULL) != 0) {
     pthread_mutex_destroy(&m_lock);
-    throw AhuException("Cannot create semaphore: cannot allocate condition");
+    throw PDNSException("Cannot create semaphore: cannot allocate condition");
   }
 
   m_count = (uint32_t) value;

@@ -6,6 +6,10 @@
     under the terms of the GNU General Public License version 2 as published
     by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -18,23 +22,20 @@
 #ifndef NAMESERVER_HH
 #define NAMESERVER_HH
 
-#ifndef WIN32
-# include <poll.h>
-# include <sys/types.h>
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <sys/time.h>
-# include <unistd.h>
-# include <arpa/inet.h>
-# include <netdb.h>
-
-#endif // WIN32
-
+#include <poll.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <vector>
 #include <boost/foreach.hpp>
 #include "statbag.hh"
 #include "namespaces.hh"
 #include "dnspacket.hh"
+#include "responsestats.hh"
 
 /** This is the main class. It opens a socket on udp port 53 and waits for packets. Those packets can 
     be retrieved with the receive() member function, which returns a DNSPacket.
@@ -70,14 +71,31 @@
 
 */
 
+#ifdef __linux__
+#ifndef SO_REUSEPORT
+#define SO_REUSEPORT 15
+#endif
+#endif
+
 class UDPNameserver
 {
 public:
-  UDPNameserver();  //!< Opens the socket
+  UDPNameserver( bool additional_socket = false );  //!< Opens the socket
   DNSPacket *receive(DNSPacket *prefilled=0); //!< call this in a while or for(;;) loop to get packets
-  static void send(DNSPacket *); //!< send a DNSPacket. Will call DNSPacket::truncate() if over 512 bytes
+  void send(DNSPacket *); //!< send a DNSPacket. Will call DNSPacket::truncate() if over 512 bytes
+  inline bool canReusePort() {
+#ifdef SO_REUSEPORT
+    return d_can_reuseport;
+#else
+    return false;
+#endif
+  };
   
 private:
+  bool d_additional_socket;
+#ifdef SO_REUSEPORT
+  bool d_can_reuseport;
+#endif
   vector<int> d_sockets;
   void bindIPv4();
   void bindIPv6();
@@ -85,5 +103,7 @@ private:
 };
 
 bool AddressIsUs(const ComboAddress& remote);
+
+extern ResponseStats g_rs;
 
 #endif

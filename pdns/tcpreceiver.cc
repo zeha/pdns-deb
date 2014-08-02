@@ -5,7 +5,11 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -67,7 +71,7 @@ void TCPNameserver::go()
   try {
     s_P=new PacketHandler;
   }
-  catch(AhuException &ae) {
+  catch(PDNSException &ae) {
     L<<Logger::Error<<Logger::NTLog<<"TCP server is unable to launch backends - will try again when questions come in"<<endl;
     L<<Logger::Error<<"TCP server is unable to launch backends - will try again when questions come in: "<<ae.reason<<endl;
   }
@@ -80,7 +84,7 @@ void *TCPNameserver::launcher(void *data)
   return 0;
 }
 
-// throws AhuException if things didn't go according to plan, returns 0 if really 0 bytes were read
+// throws PDNSException if things didn't go according to plan, returns 0 if really 0 bytes were read
 int readnWithTimeout(int fd, void* buffer, unsigned int n, bool throwOnEOF=true)
 {
   unsigned int bytes=n;
@@ -147,11 +151,7 @@ void connectWithTimeout(int fd, struct sockaddr* remote, size_t socklen)
   int err;
   Utility::socklen_t len=sizeof(err);
 
-#ifndef WIN32
-  if((err=connect(fd, remote, socklen))<0 && errno!=EINPROGRESS) 
-#else
-  if((err=connect(clisock, remote, socklen))<0 && WSAGetLastError() != WSAEWOULDBLOCK ) 
-#endif // WIN32
+  if((err=connect(fd, remote, socklen))<0 && errno!=EINPROGRESS)
     throw NetworkError("connect: "+stringerror());
 
   if(!err)
@@ -175,6 +175,18 @@ void connectWithTimeout(int fd, struct sockaddr* remote, size_t socklen)
 
 void TCPNameserver::sendPacket(shared_ptr<DNSPacket> p, int outsock)
 {
+
+  /* Query statistics */
+  if(p->qtype.getCode()!=QType::AXFR && p->qtype.getCode()!=QType::IXFR) {
+    if(p->d.aa) {
+      if(p->d.rcode==RCode::NXDomain)
+        S.ringAccount("nxdomain-queries",p->qdomain+"/"+p->qtype.getName());
+    } else if(p->isEmpty()) {
+      S.ringAccount("unauth-queries",p->qdomain+"/"+p->qtype.getName());
+      S.ringAccount("remotes-unauth",p->getRemote());
+    }
+  }
+
   uint16_t len=htons(p->getString().length());
   string buffer((const char*)&len, 2);
   buffer.append(p->getString());
@@ -241,7 +253,7 @@ void *TCPNameserver::doConnection(void *data)
   pthread_detach(pthread_self());
   Utility::setNonBlocking(fd);
   try {
-    char mesg[512];
+    char mesg[65535];
     
     DLOG(L<<"TCP Connection accepted on fd "<<fd<<endl);
     bool logDNSQueries= ::arg().mustDo("log-dns-queries");
@@ -259,7 +271,14 @@ void *TCPNameserver::doConnection(void *data)
       else
         pktlen=ntohs(pktlen);
 
-      if(pktlen>511) {
+      // this check will always be false *if* no one touches
+      // the mesg array. pktlen can be maximum of 65535 as
+      // it is 2 byte unsigned variable. In getQuestion, we 
+      // write to 0 up to pktlen-1 so 65535 is just right. 
+
+      // do not remove this check as it will catch if someone
+      // decreases the mesg buffer size for some reason. 
+      if(pktlen>sizeof(mesg)) {
         L<<Logger::Error<<"Received an overly large question from "<<remote.toString()<<", dropping"<<endl;
         break;
       }
@@ -274,9 +293,15 @@ void *TCPNameserver::doConnection(void *data)
       if(packet->parse(mesg, pktlen)<0)
         break;
       
-      if(packet->qtype.getCode()==QType::AXFR || packet->qtype.getCode()==QType::IXFR ) {
-        if(doAXFR(packet->qdomain, packet, fd)) 
-          S.inc("tcp-answers");  
+      if(packet->qtype.getCode()==QType::AXFR) {
+        if(doAXFR(packet->qdomain, packet, fd))
+          S.inc("tcp-answers");
+        continue;
+      }
+
+      if(packet->qtype.getCode()==QType::IXFR) {
+        if(doIXFR(packet, fd))
+          S.inc("tcp-answers");
         continue;
       }
 
@@ -293,7 +318,7 @@ void *TCPNameserver::doConnection(void *data)
       }
 
 
-      if(!packet->d.rd && packet->couldBeCached() && PC.get(packet.get(), cached.get())) { // short circuit - does the PacketCache recognize this question?
+      if(!packet->d.rd && packet->couldBeCached() && PC.get(packet.get(), cached.get(), false)) { // short circuit - does the PacketCache recognize this question?
         if(logDNSQueries)
           L<<"packetcache HIT"<<endl;
         cached->setRemote(&packet->d_remote);
@@ -337,7 +362,7 @@ void *TCPNameserver::doConnection(void *data)
 
     L<<Logger::Error<<"TCP Connection Thread unable to answer a question because of a backend error, cycling"<<endl;
   }
-  catch(AhuException &ae) {
+  catch(PDNSException &ae) {
     Lock l(&s_plock);
     delete s_P;
     s_P = 0; // on next call, backend will be recycled
@@ -374,13 +399,16 @@ bool TCPNameserver::canDoAXFR(shared_ptr<DNSPacket> q)
       return false;
     
     DNSSECKeeper dk;
-    
-    if(!dk.TSIGGrantsAccess(q->qdomain, keyname, trc.d_algoName)) {
-      L<<Logger::Error<<"AXFR '"<<q->qdomain<<"' denied: key with name '"<<keyname<<"' and algorithm '"<<trc.d_algoName<<"' does not grant access to zone"<<endl;
+
+    string algorithm=toLowerCanonic(trc.d_algoName);
+    if (algorithm == "hmac-md5.sig-alg.reg.int")
+      algorithm = "hmac-md5";
+    if(!dk.TSIGGrantsAccess(q->qdomain, keyname)) {
+      L<<Logger::Error<<"AXFR '"<<q->qdomain<<"' denied: key with name '"<<keyname<<"' and algorithm '"<<algorithm<<"' does not grant access to zone"<<endl;
       return false;
     }
     else {
-      L<<Logger::Warning<<"AXFR of domain '"<<q->qdomain<<"' allowed: TSIG signed request with authorized key '"<<keyname<<"' and algorithm '"<<trc.d_algoName<<"'"<<endl;
+      L<<Logger::Warning<<"AXFR of domain '"<<q->qdomain<<"' allowed: TSIG signed request with authorized key '"<<keyname<<"' and algorithm '"<<algorithm<<"'"<<endl;
       return true;
     }
   }
@@ -556,7 +584,10 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
   q->getTSIGDetails(&trc, &tsigkeyname, 0);
 
   if(!tsigkeyname.empty()) {
-    string tsig64, algorithm;
+    string tsig64;
+    string algorithm=toLowerCanonic(trc.d_algoName);
+    if (algorithm == "hmac-md5.sig-alg.reg.int")
+      algorithm = "hmac-md5";
     Lock l(&s_plock);
     s_P->getBackend()->getTSIGKey(tsigkeyname, &algorithm, &tsig64);
     B64Decode(tsig64, tsigsecret);
@@ -584,7 +615,7 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
   trc.d_mac = outpacket->d_trc.d_mac;
   outpacket = getFreshAXFRPacket(q);
   
-  ChunkedSigningPipe csp(target, securedZone, "", ::arg().asNum("signing-threads"));
+  ChunkedSigningPipe csp(target, securedZone, "", ::arg().asNum("signing-threads", 1));
   
   typedef map<string, NSECXEntry> nsecxrepo_t;
   nsecxrepo_t nsecxrepo;
@@ -641,14 +672,88 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
     return 0;
   }
 
+
+  const bool rectify = !(presignedZone || ::arg().mustDo("disable-axfr-rectify"));
+  set<string> qnames, nsset, terms;
+  vector<DNSResourceRecord> rrs;
+
+  while(sd.db->get(rr)) {
+    if(endsOn(rr.qname, target)) {
+      if (rectify) {
+        if (rr.qtype.getCode()) {
+          qnames.insert(rr.qname);
+          if(rr.qtype.getCode() == QType::NS && !pdns_iequals(rr.qname, target))
+            nsset.insert(rr.qname);
+        } else {
+          // remove existing ents
+          continue;
+        }
+      }
+      rrs.push_back(rr);
+    } else {
+      L<<Logger::Warning<<"Zone '"<<target<<"' contains out-of-zone data '"<<rr.qname<<"'|"<<rr.qtype.getName()<<"', ignoring"<<endl;
+      continue;
+    }
+  }
+
+  if(rectify) {
+    // set auth
+    BOOST_FOREACH(DNSResourceRecord &rr, rrs) {
+      rr.auth=true;
+      if (rr.qtype.getCode() != QType::NS || !pdns_iequals(rr.qname, target)) {
+        string shorter(rr.qname);
+        do {
+          if (pdns_iequals(shorter, target)) // apex is always auth
+            continue;
+          if(nsset.count(shorter) && !(pdns_iequals(rr.qname, shorter) && rr.qtype.getCode() == QType::DS))
+            rr.auth=false;
+        } while(chopOff(shorter));
+      } else
+        continue;
+    }
+
+    if(NSEC3Zone) {
+      // ents are only required for NSEC3 zones
+      uint32_t maxent = ::arg().asNum("max-ent-entries");
+      map<string,bool> nonterm;
+      BOOST_FOREACH(DNSResourceRecord &rr, rrs) {
+        string shorter(rr.qname);
+        while(!pdns_iequals(shorter, target) && chopOff(shorter)) {
+          if(!qnames.count(shorter)) {
+            if(!(maxent)) {
+              L<<Logger::Warning<<"Zone '"<<target<<"' has too many empty non terminals."<<endl;
+              return 0;
+            }
+            if (!nonterm.count(shorter)) {
+              nonterm.insert(pair<string, bool>(shorter, rr.auth));
+              --maxent;
+            } else if (rr.auth)
+              nonterm[shorter]=true;
+          }
+        }
+      }
+
+      pair<string,bool> nt;
+      BOOST_FOREACH(nt, nonterm) {
+        DNSResourceRecord rr;
+        rr.qname=nt.first;
+        rr.qtype="TYPE0";
+        rr.auth=(nt.second || !ns3pr.d_flags);
+        rrs.push_back(rr);
+      }
+    }
+  }
+
+
   /* now write all other records */
   
   string keyname;
   set<string> ns3rrs;
+  unsigned int udiff;
   DTime dt;
   dt.set();
   int records=0;
-  while(sd.db->get(rr)) {
+  BOOST_FOREACH(DNSResourceRecord &rr, rrs) {
     if (rr.qtype.getCode() == QType::RRSIG) {
       RRSIGRecordContent rrc(rr.content);
       if(presignedZone && rrc.d_type == QType::NSEC3)
@@ -695,8 +800,8 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
       }
     }
   }
-  unsigned int udiff=dt.udiffNoReset();
   /*
+  udiff=dt.udiffNoReset();
   cerr<<"Starting NSEC: "<<csp.d_signed/(udiff/1000000.0)<<" sigs/s, "<<csp.d_signed<<" / "<<udiff/1000000.0<<endl;
   cerr<<"Outstanding: "<<csp.d_outstanding<<", "<<csp.d_queued - csp.d_signed << endl;
   cerr<<"Ready for consumption: "<<csp.getReady()<<endl;
@@ -724,7 +829,7 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
               inext = nsecxrepo.begin();
           }
           n3rc.d_nexthash = inext->first;
-          rr.qname = dotConcat(toLower(toBase32Hex(iter->first)), sd.qname);
+          rr.qname = dotConcat(toBase32Hex(iter->first), sd.qname);
 
           rr.ttl = sd.default_ttl;
           rr.content = n3rc.getZoneRepresentation();
@@ -782,8 +887,8 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
       }
     }
   }
-  udiff=dt.udiffNoReset();
   /*
+  udiff=dt.udiffNoReset();
   cerr<<"Flushing pipe: "<<csp.d_signed/(udiff/1000000.0)<<" sigs/s, "<<csp.d_signed<<" / "<<udiff/1000000.0<<endl;
   cerr<<"Outstanding: "<<csp.d_outstanding<<", "<<csp.d_queued - csp.d_signed << endl;
   cerr<<"Ready for consumption: "<<csp.getReady()<<endl;
@@ -821,6 +926,131 @@ int TCPNameserver::doAXFR(const string &target, shared_ptr<DNSPacket> q, int out
   return 1;
 }
 
+int TCPNameserver::doIXFR(shared_ptr<DNSPacket> q, int outsock)
+{
+  shared_ptr<DNSPacket> outpacket=getFreshAXFRPacket(q);
+  if(q->d_dnssecOk)
+    outpacket->d_dnssecOk=true; // RFC 5936, 2.2.5 'SHOULD'
+
+  DNSSECKeeper dk;
+  NSEC3PARAMRecordContent ns3pr;
+  bool narrow;
+
+  dk.clearCaches(q->qdomain);
+  bool securedZone = dk.isSecuredZone(q->qdomain);
+  if(dk.getNSEC3PARAM(q->qdomain, &ns3pr, &narrow)) {
+    if(narrow) {
+      L<<Logger::Error<<"Not doing IXFR of an NSEC3 narrow zone."<<endl;
+      L<<Logger::Error<<"IXFR of domain '"<<q->qdomain<<"' denied to "<<q->getRemote()<<endl;
+      outpacket->setRcode(RCode::Refused);
+      sendPacket(outpacket,outsock);
+      return 0;
+    }
+  }
+
+  uint32_t serial = 0;
+  MOADNSParser mdp(q->getString());
+  for(MOADNSParser::answers_t::const_iterator i=mdp.d_answers.begin(); i != mdp.d_answers.end(); ++i) {
+    const DNSRecord *rr = &i->first;
+    if (rr->d_type == QType::SOA && rr->d_place == DNSRecord::Nameserver) {
+      vector<string>parts;
+      stringtok(parts, rr->d_content->getZoneRepresentation());
+      if (parts.size() >= 3) {
+        serial=atoi(parts[2].c_str());
+      } else {
+        L<<Logger::Error<<"No serial in IXFR query"<<endl;
+        outpacket->setRcode(RCode::FormErr);
+        sendPacket(outpacket,outsock);
+        return 0;
+      }
+    } else if (rr->d_type != QType::TSIG) {
+      L<<Logger::Error<<"Additional records in IXFR query"<<endl;
+      outpacket->setRcode(RCode::FormErr);
+      sendPacket(outpacket,outsock);
+      return 0;
+    }
+  }
+
+  L<<Logger::Error<<"IXFR of domain '"<<q->qdomain<<"' initiated by "<<q->getRemote()<<" with serial "<<serial<<endl;
+
+  SOAData sd;
+  sd.db=(DNSBackend *)-1; // force uncached answer
+  {
+    Lock l(&s_plock);
+    DLOG(L<<"Looking for SOA"<<endl); // find domain_id via SOA and list complete domain. No SOA, no IXFR
+    if(!s_P) {
+      L<<Logger::Error<<"TCP server is without backend connections in doIXFR, launching"<<endl;
+      s_P=new PacketHandler;
+    }
+
+    if(!s_P->getBackend()->getSOA(q->qdomain, sd) || !canDoAXFR(q)) {
+      L<<Logger::Error<<"IXFR of domain '"<<q->qdomain<<"' failed: not authoritative"<<endl;
+      outpacket->setRcode(9); // 'NOTAUTH'
+      sendPacket(outpacket,outsock);
+      return 0;
+    }
+  }
+
+  string target = q->qdomain;
+
+  UeberBackend db;
+  sd.db=(DNSBackend *)-1; // force uncached answer
+  if(!db.getSOA(target, sd)) {
+    L<<Logger::Error<<"IXFR of domain '"<<target<<"' failed: not authoritative in second instance"<<endl;
+    outpacket->setRcode(9); // 'NOTAUTH'
+    sendPacket(outpacket,outsock);
+    return 0;
+  }
+
+  if(!sd.db || sd.db==(DNSBackend *)-1) {
+    L<<Logger::Error<<"Error determining backend for domain '"<<target<<"' trying to serve an IXFR"<<endl;
+    outpacket->setRcode(RCode::ServFail);
+    sendPacket(outpacket,outsock);
+    return 0;
+  }
+  if (!rfc1982LessThan(serial, sd.serial)) {
+    TSIGRecordContent trc;
+    string tsigkeyname, tsigsecret;
+
+    q->getTSIGDetails(&trc, &tsigkeyname, 0);
+
+    if(!tsigkeyname.empty()) {
+      string tsig64;
+      string algorithm=toLowerCanonic(trc.d_algoName);
+      if (algorithm == "hmac-md5.sig-alg.reg.int")
+        algorithm = "hmac-md5";
+      Lock l(&s_plock);
+      s_P->getBackend()->getTSIGKey(tsigkeyname, &algorithm, &tsig64);
+      B64Decode(tsig64, tsigsecret);
+    }
+
+    UeberBackend signatureDB;
+
+    // SOA *must* go out first, our signing pipe might reorder
+    DLOG(L<<"Sending out SOA"<<endl);
+    DNSResourceRecord soa = makeDNSRRFromSOAData(sd);
+    outpacket->addRecord(soa);
+    editSOA(dk, sd.qname, outpacket.get());
+    if(securedZone) {
+      set<string, CIStringCompare> authSet;
+      authSet.insert(target);
+      addRRSigs(dk, signatureDB, authSet, outpacket->getRRS());
+    }
+
+    if(!tsigkeyname.empty())
+      outpacket->setTSIGDetails(trc, tsigkeyname, tsigsecret, trc.d_mac); // first answer is 'normal'
+
+    sendPacket(outpacket, outsock);
+
+    L<<Logger::Error<<"IXFR of domain '"<<target<<"' to "<<q->getRemote()<<" finished"<<endl;
+
+    return 1;
+  }
+
+  L<<Logger::Error<<"IXFR fallback to AXFR for domain '"<<target<<"' our serial "<<sd.serial<<endl;
+  return doAXFR(q->qdomain, q, outsock);
+}
+
 TCPNameserver::~TCPNameserver()
 {
   delete d_connectionroom_sem;
@@ -839,23 +1069,17 @@ TCPNameserver::TCPNameserver()
   stringtok(locals6,::arg()["local-ipv6"]," ,");
 
   if(locals.empty() && locals6.empty())
-    throw AhuException("No local address specified");
+    throw PDNSException("No local address specified");
 
-  vector<string> parts;
-  stringtok( parts, ::arg()["allow-axfr-ips"], ", \t" ); // is this IP on the guestlist?
-  for( vector<string>::const_iterator i = parts.begin(); i != parts.end(); ++i ) {
-    d_ng.addMask( *i );
-  }
+  d_ng.toMasks(::arg()["allow-axfr-ips"] );
 
-#ifndef WIN32
   signal(SIGPIPE,SIG_IGN);
-#endif // WIN32
 
   for(vector<string>::const_iterator laddr=locals.begin();laddr!=locals.end();++laddr) {
     int s=socket(AF_INET,SOCK_STREAM,0); 
     
     if(s<0) 
-      throw AhuException("Unable to acquire TCP socket: "+stringerror());
+      throw PDNSException("Unable to acquire TCP socket: "+stringerror());
 
     Utility::setCloseOnExec(s);
 
@@ -868,8 +1092,14 @@ TCPNameserver::TCPNameserver()
     }
     
     if(::bind(s, (sockaddr*)&local, local.getSocklen())<0) {
-      L<<Logger::Error<<"binding to TCP socket: "<<strerror(errno)<<endl;
-      throw AhuException("Unable to bind to TCP socket");
+      close(s);
+      if( errno == EADDRNOTAVAIL && ! ::arg().mustDo("local-address-nonexist-fail") ) {
+        L<<Logger::Error<<"IPv4 Address " << *laddr << " does not exist on this server - skipping TCP bind" << endl;
+        continue;
+      } else {
+        L<<Logger::Error<<"binding to TCP socket " << *laddr << ": "<<strerror(errno)<<endl;
+        throw PDNSException("Unable to bind to TCP socket");
+      }
     }
     
     listen(s,128);
@@ -883,12 +1113,12 @@ TCPNameserver::TCPNameserver()
     d_prfds.push_back(pfd);
   }
 
-#if !WIN32 && HAVE_IPV6
+#if HAVE_IPV6
   for(vector<string>::const_iterator laddr=locals6.begin();laddr!=locals6.end();++laddr) {
     int s=socket(AF_INET6,SOCK_STREAM,0); 
 
     if(s<0) 
-      throw AhuException("Unable to acquire TCPv6 socket: "+stringerror());
+      throw PDNSException("Unable to acquire TCPv6 socket: "+stringerror());
 
     Utility::setCloseOnExec(s);
 
@@ -903,8 +1133,14 @@ TCPNameserver::TCPNameserver()
       L<<Logger::Error<<"Failed to set IPv6 socket to IPv6 only, continuing anyhow: "<<strerror(errno)<<endl;
     }
     if(bind(s, (const sockaddr*)&local, local.getSocklen())<0) {
-      L<<Logger::Error<<"binding to TCP socket: "<<strerror(errno)<<endl;
-      throw AhuException("Unable to bind to TCPv6 socket");
+      close(s);
+      if( errno == EADDRNOTAVAIL && ! ::arg().mustDo("local-ipv6-nonexist-fail") ) {
+        L<<Logger::Error<<"IPv6 Address " << *laddr << " does not exist on this server - skipping TCP bind" << endl;
+        continue;
+      } else {
+        L<<Logger::Error<<"binding to TCPv6 socket" << *laddr << ": "<<strerror(errno)<<endl;
+        throw PDNSException("Unable to bind to TCPv6 socket");
+      }
     }
     
     listen(s,128);
@@ -918,7 +1154,7 @@ TCPNameserver::TCPNameserver()
 
     d_prfds.push_back(pfd);
   }
-#endif // WIN32
+#endif
 }
 
 
@@ -967,7 +1203,7 @@ void TCPNameserver::thread()
       }
     }
   }
-  catch(AhuException &AE) {
+  catch(PDNSException &AE) {
     L<<Logger::Error<<"TCP Nameserver thread dying because of fatal error: "<<AE.reason<<endl;
   }
   catch(...) {
