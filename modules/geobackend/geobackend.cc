@@ -118,7 +118,7 @@ void GeoBackend::lookup(const QType &qtype, const string &qdomain, DNSPacket *pk
         	i_answers = answers.begin();		
 }
 
-bool GeoBackend::list(const string &target, int domain_id) {
+bool GeoBackend::list(const string &target, int domain_id, bool include_disabled) {
         answers.clear();
         queueNSRecords(zoneName);
         answerLocalhostRecord("localhost."+zoneName, NULL);
@@ -188,11 +188,11 @@ void GeoBackend::answerGeoRecord(const QType &qtype, const string &qdomain, DNSP
         short isocode = 0;
         if (p != NULL && ipt != NULL) {
         	try {
-        		isocode = ipt->lookup(p->getRemote());
+        		isocode = ipt->lookup(p->getRealRemote().toString());
         	}
         	catch(ParsePrefixException &e) {	// Ignore
         		L << Logger::Notice << logprefix << "Unable to parse IP '"
-        			<< p->getRemote()	<< " as IPv4 prefix" << endl;
+        			<< p->getRealRemote().toString()	<< " as IPv4 prefix" << endl;
         	}
         }
         
@@ -202,7 +202,7 @@ void GeoBackend::answerGeoRecord(const QType &qtype, const string &qdomain, DNSP
         
         L << Logger::Debug << logprefix << "Serving " << qdomain << " "
                 << rr->qtype.getName() << " " << target << " to "
-                << (p != NULL ? p->getRemote() : "(unknown)")
+                << (p != NULL ? p->getRealRemote().toString() : "(unknown)")
                 << " (" << isocode << ")" << endl;
         	
         answers.push_back(rr);		
@@ -212,7 +212,7 @@ void GeoBackend::answerLocalhostRecord(const string &qdomain, DNSPacket *p) {
         short isocode = 0;
         if (p != NULL) {
         	try {
-        		isocode = ipt->lookup(p->getRemote());
+        		isocode = ipt->lookup(p->getRealRemote().toString());
         	}
         	catch(ParsePrefixException &e) {}	// Ignore
         }
@@ -287,7 +287,7 @@ const string GeoBackend::resolveTarget(const GeoRecord &gr, short isocode) const
 void GeoBackend::loadZoneName() {
         zoneName = getArg("zone");
         if (zoneName.empty())
-        	throw AhuException("zone parameter must be set");	
+        	throw PDNSException("zone parameter must be set");	
 }
 
 void GeoBackend::loadTTLValues() {
@@ -304,7 +304,7 @@ void GeoBackend::loadSOAValues() {
         	return;
         
         if (values.size() != 2)
-        	throw AhuException("Invalid number of soa-values specified in configuration");
+        	throw PDNSException("Invalid number of soa-values specified in configuration");
         
         soaMasterServer = values[0];
         soaHostmaster = values[1];	
@@ -318,14 +318,14 @@ void GeoBackend::loadIPLocationMap() {
         string filename = getArg("ip-map-zonefile");
         
         if (filename.empty())
-        	throw AhuException("No IP map zonefile specified in configuration");
+        	throw PDNSException("No IP map zonefile specified in configuration");
         
         // Stat file to see if it has changed since last read
         struct stat stbuf;
         if (stat(filename.c_str(), &stbuf) != 0 || !S_ISREG(stbuf.st_mode)) {
         	const string errormsg = "stat() failed, or " + filename + " is no regular file.";
         	if (lastDiscoverTime == 0)	// We have no older map, bail out
-        		throw AhuException(errormsg);
+        		throw PDNSException(errormsg);
         	else {
         		// Log, but continue
         		L << Logger::Error << logprefix << errormsg;
@@ -338,7 +338,7 @@ void GeoBackend::loadIPLocationMap() {
         
         std::ifstream ifs(filename.c_str(), std::ios::in);
         if (!ifs)
-        	throw AhuException("Unable to open IP map zonefile for read: " + stringerror());
+        	throw PDNSException("Unable to open IP map zonefile for read: " + stringerror());
         	
         L << Logger::Info << logprefix << "Parsing IP map zonefile" << endl;
         
@@ -464,10 +464,10 @@ void GeoBackend::loadDirectorMaps(const vector<GeoRecord*> &newgrs) {
         			mapcount++;
         		}
         		else
-        			throw AhuException("duplicate georecord " + gr->qname + ", skipping");
+        			throw PDNSException("duplicate georecord " + gr->qname + ", skipping");
         	}
-        	catch(AhuException &e) {
-        		L << Logger::Error << logprefix << "Error occured while reading director file "
+        	catch(PDNSException &e) {
+        		L << Logger::Error << logprefix << "Error occurred while reading director file "
         			<< gr->directorfile << ": " << e.reason << endl;
         		delete gr;
         	}
@@ -489,7 +489,7 @@ void GeoBackend::loadDirectorMap(GeoRecord &gr) {
         
         std::ifstream ifs(gr.directorfile.c_str(), std::ios::in);
         if (!ifs)
-        	throw AhuException("Error opening file.");
+        	throw PDNSException("Error opening file.");
         
         string line;
         while(getline(ifs, line)) {
@@ -508,7 +508,7 @@ void GeoBackend::loadDirectorMap(GeoRecord &gr) {
         			gr.qname.resize(gr.qname.size()-1);
         			// Check whether zoneName is a prefix of this FQDN
         			if (gr.qname.rfind(zoneName) == string::npos)
-        				throw AhuException("georecord " + gr.qname + " is out of zone " + zoneName);
+        				throw PDNSException("georecord " + gr.qname + " is out of zone " + zoneName);
         		}
         		continue;
         	}
@@ -532,8 +532,8 @@ void GeoBackend::loadDirectorMap(GeoRecord &gr) {
         // Do some checks on the validness of this director map / georecord
         
         if (gr.qname.empty())
-        	throw AhuException("$RECORD line empty or missing, georecord qname unknown");
+        	throw PDNSException("$RECORD line empty or missing, georecord qname unknown");
         
         if (gr.dirmap.count(0) == 0)
-        	throw AhuException("No default (0) director map entry");
+        	throw PDNSException("No default (0) director map entry");
 }

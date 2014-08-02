@@ -12,14 +12,14 @@ CDB::CDB(const string &cdbfile)
 	if (d_fd < 0)
 	{
 		L<<Logger::Error<<"Failed to open cdb database file '"<<cdbfile<<"'. Error: "<<stringerror()<<endl;
-		throw new AhuException("Failed to open cdb database file '"+cdbfile+"'. Error: " + stringerror());
+		throw new PDNSException("Failed to open cdb database file '"+cdbfile+"'. Error: " + stringerror());
 	}
 
 	int cdbinit = cdb_init(&d_cdb, d_fd);
 	if (cdbinit < 0) 
 	{
 		L<<Logger::Error<<"Failed to initialize cdb structure. ErrorNr: '"<<cdbinit<<endl;
-		throw new AhuException("Failed to initialize cdb structure.");
+		throw new PDNSException("Failed to initialize cdb structure.");
 	}
 }
 
@@ -43,7 +43,7 @@ bool CDB::searchSuffix(const string &key) {
 	//See CDB::searchKey() 
 	d_key = strdup(key.c_str());
 
-	// We are ok wiht a search on things, but we do want to know if a record with that key exists.........
+	// We are ok with a search on things, but we do want to know if a record with that key exists.........
 	bool hasDomain = (cdb_find(&d_cdb, key.c_str(), key.size()) == 1);
 	if (hasDomain) {
 		cdb_seqinit(&d_seqPtr, &d_cdb);

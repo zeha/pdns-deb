@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,25 +27,25 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-#ifndef WIN32
-# include "config.h"
-# include <unistd.h>
-#else
-# include "pdnsservice.hh"
-#endif // WIN32
+#include "config.h"
+#include <unistd.h>
 
 #include "namespaces.hh"
 
 
 bool DLQuitPlease();
+void setStatus(const string &str);
 string DLQuitHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLRQuitHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLPingHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLShowHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLUptimeHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLSettingsHandler(const vector<string>&parts, Utility::pid_t ppid);
-void setStatus(const string &str);
+string DLRespSizeHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLCCHandler(const vector<string>&parts, Utility::pid_t ppid);
+string DLQTypesHandler(const vector<string>&parts, Utility::pid_t ppid);
+string DLRSizesHandler(const vector<string>&parts, Utility::pid_t ppid);
+string DLRemotesHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLStatusHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLNotifyHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLNotifyHostHandler(const vector<string>&parts, Utility::pid_t ppid);
@@ -51,4 +54,6 @@ string DLRediscoverHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLVersionHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLPurgeHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLNotifyRetrieveHandler(const vector<string>&parts, Utility::pid_t ppid);
+string DLCurrentConfigHandler(const vector<string>&parts, Utility::pid_t ppid);
+string DLListZones(const vector<string>&parts, Utility::pid_t ppid);
 #endif /* PDNS_DYNHANDLER_HH */

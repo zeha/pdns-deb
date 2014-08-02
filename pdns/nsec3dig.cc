@@ -15,7 +15,7 @@ typedef set<nsec3> nsec3set;
 
 string nsec3Hash(const string &qname, const string &salt, unsigned int iters)
 {
-  return toLower(toBase32Hex(hashQNameWithSalt(iters, salt, qname)));
+  return toBase32Hex(hashQNameWithSalt(iters, salt, qname));
 }
 
 void proveOrDeny(const nsec3set &nsec3s, const string &qname, const string &salt, unsigned int iters, set<string> &proven, set<string> &denied)
@@ -77,23 +77,25 @@ try
   if(recurse)
   {
     pw.getHeader()->rd=true;
+    pw.getHeader()->cd=true;
   }
 
   pw.addOpt(2800, 0, EDNSOpts::DNSSECOK);
   pw.commit();
 
-  Socket sock(InterNetwork, Stream);
+
   ComboAddress dest(argv[1] + (*argv[1]=='@'), atoi(argv[2]));
+  Socket sock(dest.sin4.sin_family, SOCK_STREAM);  
   sock.connect(dest);
   uint16_t len;
   len = htons(packet.size());
   if(sock.write((char *) &len, 2) != 2)
-    throw AhuException("tcp write failed");
+    throw PDNSException("tcp write failed");
 
   sock.writen(string((char*)&*packet.begin(), (char*)&*packet.end()));
   
   if(sock.read((char *) &len, 2) != 2)
-    throw AhuException("tcp read failed");
+    throw PDNSException("tcp read failed");
 
   len=ntohs(len);
   char *creply = new char[len];
@@ -102,7 +104,7 @@ try
   while(n<len) {
     numread=sock.read(creply+n, len-n);
     if(numread<0)
-      throw AhuException("tcp read failed");
+      throw PDNSException("tcp read failed");
     n+=numread;
   }
 
@@ -130,7 +132,7 @@ try
       // cerr<<toBase32Hex(r.d_nexthash)<<endl;
       vector<string> parts;
       boost::split(parts, i->first.d_label, boost::is_any_of("."));
-      nsec3s.insert(make_pair(toLower(parts[0]), toLower(toBase32Hex(r.d_nexthash))));
+      nsec3s.insert(make_pair(toLower(parts[0]), toBase32Hex(r.d_nexthash)));
       nsec3salt = r.d_salt;
       nsec3iters = r.d_iterations;
     }

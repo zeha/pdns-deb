@@ -5,7 +5,7 @@
 #include <limits.h>
 
 DNSPacketWriter::DNSPacketWriter(vector<uint8_t>& content, const string& qname, uint16_t  qtype, uint16_t qclass, uint8_t opcode)
-  : d_pos(0), d_content(content), d_qname(qname), d_qtype(qtype), d_qclass(qclass), d_canonic(false), d_lowerCase(false)
+  : d_pos(0), d_content(content), d_qname(qname), d_canonic(false), d_lowerCase(false)
 {
   d_content.clear();
   dnsheader dnsheader;
@@ -46,6 +46,7 @@ DNSPacketWriter::DNSPacketWriter(vector<uint8_t>& content, const string& qname, 
 
   d_stuff=0xffff;
   d_labelmap.reserve(16);
+  d_truncatemarker=d_content.size();
 }
 
 dnsheader* DNSPacketWriter::getHeader()
@@ -248,7 +249,7 @@ void DNSPacketWriter::xfrLabel(const string& Label, bool compress)
       d_record.resize(len + part.size());
 
       memcpy(((&*d_record.begin()) + len), part.c_str(), part.size());
-      pos+=(part.size())+1;        		 
+      pos+=(part.size())+1;                         
     }
     else {
       char labelsize=(char)(i->second - i->first);
@@ -292,6 +293,15 @@ void DNSPacketWriter::rollback()
   d_content.resize(d_rollbackmarker);
   d_record.clear();
   d_stuff=0;
+}
+
+void DNSPacketWriter::truncate()
+{
+  d_content.resize(d_truncatemarker);
+  d_record.clear();
+  d_stuff=0;
+  dnsheader* dh=reinterpret_cast<dnsheader*>( &*d_content.begin());
+  dh->ancount = dh->nscount = dh->arcount = 0;
 }
 
 void DNSPacketWriter::commit()

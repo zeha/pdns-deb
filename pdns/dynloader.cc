@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -30,7 +34,7 @@
 #include <boost/shared_ptr.hpp>
 
 #include <sys/stat.h>
-#include "ahuexception.hh"
+#include "pdnsexception.hh"
 #include "misc.hh"
 #include "dynmessenger.hh"
 #include "arguments.hh"
@@ -66,9 +70,9 @@ int main(int argc, char **argv)
   ::arg().laxParse(argc,argv);
 
   if(::arg().mustDo("help")) {
-    cerr<<"syntax:"<<endl<<endl;
-    cerr<<::arg().helpstring(::arg()["help"])<<endl;
-    exit(99);
+    cout<<"syntax:"<<endl<<endl;
+    cout<<::arg().helpstring(::arg()["help"])<<endl;
+    exit(0);
   }
 
   const vector<string>commands=::arg().getCommands();
@@ -153,7 +157,11 @@ int main(int argc, char **argv)
     
     cout<<resp<<endl;
   }
-  catch(AhuException &ae) {
+  catch(TimeoutException &ae) {
+    cerr<<"Timeout error: "<<ae.reason<<endl;
+    return 2;
+  }
+  catch(PDNSException &ae) {
     cerr<<"Fatal error: "<<ae.reason<<endl;
     return 1;
   }

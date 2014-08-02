@@ -10,7 +10,7 @@
 #include <pdns/dnsbackend.hh>
 #include <pdns/dnspacket.hh>
 #include <pdns/ueberbackend.hh>
-#include <pdns/ahuexception.hh>
+#include <pdns/pdnsexception.hh>
 #include <pdns/logger.hh>
 #include <pdns/arguments.hh>
 #include <boost/lexical_cast.hpp>
@@ -81,6 +81,17 @@ BOOST_AUTO_TEST_CASE(test_method_getDomainMetadata) {
       BOOST_CHECK_EQUAL(meta[0], "VALUE");
 }
 
+BOOST_AUTO_TEST_CASE(test_method_getAllDomainMetadata) {
+   std::map<std::string, std::vector<std::string> > meta;
+   BOOST_TEST_MESSAGE("Testing getAllDomainMetadata method");
+   be->getAllDomainMetadata("unit.test", meta);
+   BOOST_CHECK_EQUAL(meta.size(), 1);
+   // in case we got more than one value, which would be unexpected
+   // but not fatal
+   if (meta.size() > 0)
+      BOOST_CHECK_EQUAL(meta["TEST"][0], "VALUE");
+}
+
 BOOST_AUTO_TEST_CASE(test_method_addDomainKey) {
    BOOST_TEST_MESSAGE("Testing addDomainKey method");
    BOOST_CHECK_EQUAL(be->addDomainKey("unit.test",k1), 1);
@@ -131,12 +142,36 @@ BOOST_AUTO_TEST_CASE(test_method_getBeforeAndAfterNamesAbsolute) {
    BOOST_CHECK_EQUAL(after, "stop");
 }
 
+BOOST_AUTO_TEST_CASE(test_method_setTSIGKey) {
+   std::string algorithm, content;
+   BOOST_TEST_MESSAGE("Testing setTSIGKey method");
+   BOOST_CHECK_MESSAGE(be->setTSIGKey("unit.test","hmac-md5","kp4/24gyYsEzbuTVJRUMoqGFmN3LYgVDzJ/3oRSP7ys="), "did not return true");
+}
+
 BOOST_AUTO_TEST_CASE(test_method_getTSIGKey) {
    std::string algorithm, content;
    BOOST_TEST_MESSAGE("Testing getTSIGKey method");
    be->getTSIGKey("unit.test",&algorithm,&content);
-   BOOST_CHECK_EQUAL(algorithm, "NULL");
-   BOOST_CHECK_EQUAL(content, "NULL");
+   BOOST_CHECK_EQUAL(algorithm, "hmac-md5");
+   BOOST_CHECK_EQUAL(content, "kp4/24gyYsEzbuTVJRUMoqGFmN3LYgVDzJ/3oRSP7ys=");
+}
+
+BOOST_AUTO_TEST_CASE(test_method_deleteTSIGKey) {
+   std::string algorithm, content;
+   BOOST_TEST_MESSAGE("Testing deleteTSIGKey method");
+   BOOST_CHECK_MESSAGE(be->deleteTSIGKey("unit.test"), "did not return true");
+}
+
+BOOST_AUTO_TEST_CASE(test_method_getTSIGKeys) {
+   std::vector<struct TSIGKey> keys;
+   BOOST_TEST_MESSAGE("Testing getTSIGKeys method");
+   be->getTSIGKeys(keys);
+   BOOST_CHECK(keys.size() > 0);
+   if (keys.size() > 0) {
+     BOOST_CHECK_EQUAL(keys[0].name, "test");
+     BOOST_CHECK_EQUAL(keys[0].algorithm, "NULL");
+     BOOST_CHECK_EQUAL(keys[0].key, "NULL");
+   }
 }
 
 BOOST_AUTO_TEST_CASE(test_method_setNotified) {
@@ -154,6 +189,12 @@ BOOST_AUTO_TEST_CASE(test_method_getDomainInfo) {
    BOOST_CHECK_EQUAL(di.notified_serial, 2);
    BOOST_CHECK_EQUAL(di.kind, DomainInfo::Native);
    BOOST_CHECK_EQUAL(di.backend, be);
+}
+
+BOOST_AUTO_TEST_CASE(test_method_isMaster) {
+   BOOST_TEST_MESSAGE("Testing isMaster method");
+   BOOST_CHECK(be->isMaster("ns1.unit.test", "10.0.0.1"));
+   BOOST_CHECK(!be->isMaster("ns2.unit.test", "10.0.0.2"));
 }
 
 BOOST_AUTO_TEST_CASE(test_method_superMasterBackend) {
@@ -175,7 +216,7 @@ BOOST_AUTO_TEST_CASE(test_method_superMasterBackend) {
    rr.content = "ns2.example.com";
    nsset.push_back(rr);
 
-   BOOST_CHECK(be->superMasterBackend("10.0.0.1", "example.com", nsset, NULL, &dbd));
+   BOOST_CHECK(be->superMasterBackend("10.0.0.1", "example.com", nsset, NULL, NULL, &dbd));
 
    // let's see what we got
    BOOST_CHECK_EQUAL(dbd, be);
@@ -183,7 +224,7 @@ BOOST_AUTO_TEST_CASE(test_method_superMasterBackend) {
 
 BOOST_AUTO_TEST_CASE(test_method_createSlaveDomain) {
    BOOST_TEST_MESSAGE("Testing createSlaveDomain method");
-   BOOST_CHECK(be->createSlaveDomain("10.0.0.1", "pirate.unit.test", ""));
+   BOOST_CHECK(be->createSlaveDomain("10.0.0.1", "pirate.unit.test", "", ""));
 }
 
 BOOST_AUTO_TEST_CASE(test_method_feedRecord) {
@@ -223,7 +264,7 @@ BOOST_AUTO_TEST_CASE(test_method_replaceRRSet) {
 BOOST_AUTO_TEST_CASE(test_method_feedEnts) {
    BOOST_TEST_MESSAGE("Testing feedEnts method");
    be->startTransaction("example.com",2);
-   set<string> nonterm = boost::assign::list_of("_udp")("_sip._udp");
+   map<string, bool> nonterm = boost::assign::map_list_of("_udp", true)("_sip._udp", true);
    BOOST_CHECK(be->feedEnts(2, nonterm));
    be->commitTransaction();
 }
@@ -231,7 +272,7 @@ BOOST_AUTO_TEST_CASE(test_method_feedEnts) {
 BOOST_AUTO_TEST_CASE(test_method_feedEnts3) {
    BOOST_TEST_MESSAGE("Testing feedEnts3 method");
    be->startTransaction("example.com",2);
-   set<string> nonterm = boost::assign::list_of("_udp")("_sip._udp");
+   map<string, bool> nonterm = boost::assign::map_list_of("_udp", true)("_sip._udp", true);
    BOOST_CHECK(be->feedEnts3(2, "example.com", nonterm, 1, "\xaa\xbb\xcc\xdd", 0));
    be->commitTransaction();
 }

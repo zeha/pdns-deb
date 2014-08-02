@@ -5,7 +5,11 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -73,7 +77,7 @@ try
   gettimeofday(&tv, 0);
 
   if(!g_onlyTCP) {
-    Socket udpsock((AddressFamily)g_dest.sin4.sin_family, Datagram);
+    Socket udpsock(g_dest.sin4.sin_family, SOCK_DGRAM);
     
     udpsock.sendTo(string((char*)&*packet.begin(), (char*)&*packet.end()), g_dest);
     ComboAddress origin;
@@ -97,7 +101,7 @@ try
     g_truncates++;
   }
 
-  Socket sock((AddressFamily)g_dest.sin4.sin_family, Stream);
+  Socket sock(g_dest.sin4.sin_family, SOCK_STREAM);
   int tmp=1;
   if(setsockopt(sock.getHandle(),SOL_SOCKET,SO_REUSEADDR,(char*)&tmp,sizeof tmp)<0) 
     throw runtime_error("Unable to set socket reuse: "+string(strerror(errno)));
@@ -121,7 +125,7 @@ try
   }
   
   if(sock.read((char *) &len, 2) != 2)
-    throw AhuException("tcp read failed");
+    throw PDNSException("tcp read failed");
   
   len=ntohs(len);
   char *creply = new char[len];
@@ -130,7 +134,7 @@ try
   while(n<len) {
     numread=sock.read(creply+n, len-n);
     if(numread<0)
-      throw AhuException("tcp read failed");
+      throw PDNSException("tcp read failed");
     n+=numread;
   }
   

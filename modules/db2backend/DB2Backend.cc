@@ -11,7 +11,7 @@
 #include <pdns/dnsbackend.hh>
 #include <pdns/dnspacket.hh>
 #include <pdns/ueberbackend.hh>
-#include <pdns/ahuexception.hh>
+#include <pdns/pdnsexception.hh>
 #include <pdns/logger.hh>
 #include <pdns/arguments.hh>
 
@@ -249,7 +249,7 @@ DB2Backend::DB2Backend(const string &suffix)
       }
       
       this->Cleanup();
-      throw AhuException("DB2Backend Failed to Start");
+      throw PDNSException("DB2Backend Failed to Start");
    }
    
    L << Logger::Warning << kBackendName << " Connection succeeded" << endl;
@@ -387,7 +387,7 @@ void DB2Backend::lookup(const QType &qtype, const string &qname, DNSPacket *pkt_
       // Rethrow for the nameserver
       //
       
-      throw AhuException("Execute failed");
+      throw PDNSException("Execute failed");
    }
 }
 
@@ -430,7 +430,7 @@ bool DB2Backend::list(int inZoneId)
 
    catch (DB2Exception& theException)
    {
-      throw AhuException("List failed");
+      throw PDNSException("List failed");
    }
 
    return theResult;
@@ -494,7 +494,7 @@ bool DB2Backend::get(DNSResourceRecord& outRecord)
       // Rethrow for the nameserver
       //
       
-      throw AhuException("Fetch failed");
+      throw PDNSException("Fetch failed");
    }
    
    return theResult;
@@ -568,7 +568,7 @@ bool DB2Backend::getSOA(const string& inZoneName, SOAData& outSoaData)
       // Rethrow for the nameserver
       //
       
-      throw AhuException("GetSOA failed");
+      throw PDNSException("GetSOA failed");
    }
    
    return theResult;
@@ -616,7 +616,7 @@ class DB2Loader
       Loader()
       {
          BackendMakers().report(new DB2Factory);
-         L << Logger::Notice << kBackendName << " This is the DB2 module version "VERSION" ("__DATE__", "__TIME__") reporting" << endl;
+         L << Logger::Info << "[db2backend] This is the db2 backend version " VERSION " (" __DATE__ ", " __TIME__ ") reporting" << endl;
       }
 };
 

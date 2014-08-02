@@ -45,9 +45,9 @@ struct SendReceive
   typedef accumulator_set<
         double
       , stats<boost::accumulators::tag::extended_p_square,
-	      boost::accumulators::tag::median(with_p_square_quantile),
+              boost::accumulators::tag::median(with_p_square_quantile),
               boost::accumulators::tag::mean(immediate)
-	      >
+              >
     > acc_t;
   acc_t* d_acc;
   
@@ -237,8 +237,9 @@ int main(int argc, char** argv)
   vector<TypedQuery> domains;
     
   Inflighter<vector<TypedQuery>, SendReceive> inflighter(domains, sr);
-  inflighter.d_maxInFlight = 100;
+  inflighter.d_maxInFlight = 1000;
   inflighter.d_timeoutSeconds = 3;
+  inflighter.d_burst = 100;
   string line;
   
   pair<string, string> split;
@@ -246,11 +247,17 @@ int main(int argc, char** argv)
   while(stringfgets(stdin, line)) {
     if(limit && domains.size() >= limit)
       break;
-      
+
     trim_right(line);
+    if(line.empty() || line[0] == '#')
+      continue;
     split=splitField(line,',');
+    if (split.second.empty())
+      split=splitField(line,'\t');
+    if(!split.second.find('.')) // skip 'Hidden profile' in quantcast list.
+      continue;
     pos=split.second.find('/');
-    if(pos != string::npos) // alexa has whole urls in the list now..
+    if(pos != string::npos) // alexa has whole urls in the list now.
       split.second.resize(pos);
     if(find_if(split.second.begin(), split.second.end(), isalpha) == split.second.end())
     {

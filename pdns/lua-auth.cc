@@ -10,7 +10,7 @@ AuthLua::AuthLua(const std::string &fname)
 
 DNSPacket* AuthLua::prequery(DNSPacket *p)
 {
-  return false;
+  return 0;
 }
 
 bool AuthLua::axfrfilter(const ComboAddress& remote, const string& zone, const DNSResourceRecord& in, vector<DNSResourceRecord>& out)
@@ -199,7 +199,7 @@ void AuthLua::registerLuaDNSPacket(void) {
   lua_pushvalue(d_lua, -2);  /* pushes the metatable */
   lua_settable(d_lua, -3);  /* metatable.__index = metatable */
 
-  luaL_newlib(d_lua, ldp_methods);
+  luaL_setfuncs(d_lua, ldp_methods, 0);
 
   lua_pop(d_lua, 1);
 }
@@ -232,7 +232,6 @@ DNSPacket* AuthLua::prequery(DNSPacket *p)
 
     lua_pop(d_lua, 1);
     throw runtime_error(error);
-    return 0;
   }
   bool res=lua_toboolean(d_lua, 1);
   lua_pop(d_lua, 1);

@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,22 +24,14 @@
 
 #include <string>
 #include <sys/types.h>
-
-#ifndef WIN32
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <sys/un.h>
-# include <unistd.h>
-# include <libgen.h>
-
-#else
-# include "pdnsservice.hh"
-
-#endif // WIN32
-
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/un.h>
+#include <unistd.h>
+#include <libgen.h>
 #include <errno.h>
 #include "iputils.hh"
-#include "ahuexception.hh"
+#include "pdnsexception.hh"
 
 #include "namespaces.hh"
 
@@ -45,21 +40,24 @@ class DynMessenger
 {
   int d_s;
 
-#ifndef WIN32
   struct sockaddr_un d_local; // our local address
   struct sockaddr_un d_remote; // our remote address
 
-#else
-  HANDLE m_pipeHandle; // Named pipe handle.
-
-#endif // WIN32
   DynMessenger(const DynMessenger &); // NOT IMPLEMENTED
   
 public:
   // CREATORS
 
-  DynMessenger(const string &ldir, const string &filename);  //!< Create a DynMessenger sending to this file
-  DynMessenger(const ComboAddress& remote, const string &password);  //!< Create a DynMessenger sending to this file
+  DynMessenger(const string &ldir,
+    const string &filename,
+    int timeout_sec = 7,
+    int timeout_usec = 0);  //!< Create a DynMessenger sending to this file
+
+  DynMessenger(const ComboAddress& remote,
+    const string &password,
+    int timeout_sec = 7,
+    int timeout_usec = 0);  //!< Create a DynMessenger sending to this file
+
   ~DynMessenger();
 
   // ACCESSORS

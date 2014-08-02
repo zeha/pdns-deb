@@ -33,7 +33,7 @@ public:
 
     LUABackend(const string &suffix="");
     ~LUABackend();
-    bool list(const string &target, int domain_id);
+    bool list(const string &target, int domain_id, bool include_disabled=false);
     void lookup(const QType &qtype, const string &qname, DNSPacket *p, int domain_id);
     bool get(DNSResourceRecord &rr);
     //! fills the soadata struct with the SOA details. Returns false if there is no SOA.
@@ -51,7 +51,7 @@ public:
     bool getDomainInfo(const string &domain, DomainInfo &di);
     bool isMaster(const string &name, const string &ip);
     void getUnfreshSlaveInfos(vector<DomainInfo>* domains);
-    void setFresh(int id);
+    void setFresh(uint32_t id);
 
     bool startTransaction(const string &qname, int id);
     bool commitTransaction();
@@ -61,8 +61,8 @@ public:
 
 //  SUPERMASTER BACKEND
 
-    bool superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *account, DNSBackend **db);
-    bool createSlaveDomain(const string &ip, const string &domain, const string &account);
+    bool superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *nameserver, string *account, DNSBackend **db);
+    bool createSlaveDomain(const string &ip, const string &domain, const string &nameserver, const string &account);
 
 
 //  DNSSEC BACKEND
@@ -70,7 +70,7 @@ public:
     //! get a list of IP addresses that should also be notified for a domain
     void alsoNotifies(const string &domain, set<string> *ips);
     bool getDomainMetadata(const string& name, const std::string& kind, std::vector<std::string>& meta);
-    bool setDomainMetadata(const string& name, const std::string& kind, std::vector<std::string>& meta);
+    bool setDomainMetadata(const string& name, const std::string& kind, const std::vector<std::string>& meta);
 
     bool getDomainKeys(const string& name, unsigned int kind, std::vector<KeyData>& keys);
     bool removeDomainKey(const string& name, unsigned int id);

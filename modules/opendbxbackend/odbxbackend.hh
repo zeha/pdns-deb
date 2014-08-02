@@ -27,7 +27,7 @@
 #include <pdns/dnspacket.hh>
 #include <pdns/dnsbackend.hh>
 #include <pdns/ueberbackend.hh>
-#include <pdns/ahuexception.hh>
+#include <pdns/pdnsexception.hh>
 #include <pdns/arguments.hh>
 #include <pdns/logger.hh>
 #include <odbx.h>
@@ -77,7 +77,7 @@ public:
 
         void lookup( const QType& qtype, const string& qdomain, DNSPacket* p = 0, int zoneid = -1 );
         bool getSOA( const string& domain, SOAData& sd, DNSPacket* p );
-        bool list( const string& target, int domain_id );
+        bool list( const string& target, int domain_id, bool include_disabled=false );
         bool get( DNSResourceRecord& rr );
 
         bool startTransaction( const string& domain, int domain_id );
@@ -87,8 +87,8 @@ public:
         bool isMaster( const string& domain, const string& ip );
         bool getDomainInfo( const string& domain, DomainInfo& di );
         bool feedRecord( const DNSResourceRecord& rr, string *ordername=0 );
-        bool createSlaveDomain( const string& ip, const string& domain, const string& account );
-        bool superMasterBackend( const string& ip, const string& domain, const vector<DNSResourceRecord>& nsset, string* account, DNSBackend** ddb );
+        bool createSlaveDomain( const string& ip, const string& domain, const string &nameserver, const string& account );
+        bool superMasterBackend( const string& ip, const string& domain, const vector<DNSResourceRecord>& nsset, string *nameserver, string* account, DNSBackend** ddb );
 
         void getUpdatedMasters( vector<DomainInfo>* updated );
         void getUnfreshSlaveInfos( vector<DomainInfo>* unfresh );
@@ -164,7 +164,7 @@ public:
         OdbxLoader()
         {
         	BackendMakers().report( &factory );
-        	L.log( " [OpendbxBackend] This is the opendbx module version "VERSION" ("__DATE__", "__TIME__") reporting", Logger::Info );
+		L.log( "[opendbxbackend] This is the opendbx backend version " VERSION " (" __DATE__ ", " __TIME__ ") reporting", Logger::Info );
         }
 };
 

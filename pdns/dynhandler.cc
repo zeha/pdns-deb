@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation.
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -26,8 +30,14 @@
 #include "misc.hh"
 #include "communicator.hh"
 #include "dnsseckeeper.hh"
+#include "nameserver.hh"
+#include "responsestats.hh"
+#include "ueberbackend.hh"
+
+extern ResponseStats g_rs;
 
 static bool s_pleasequit;
+static string d_status;
 
 bool DLQuitPlease()
 {
@@ -43,7 +53,6 @@ string DLQuitHandler(const vector<string>&parts, Utility::pid_t ppid)
     L<<Logger::Error<<"Scheduling exit on remote request"<<endl;
   }
   return ret;
-
 }
 
 static void dokill(int)
@@ -51,22 +60,15 @@ static void dokill(int)
   exit(1);
 }
 
+string DLCurrentConfigHandler(const vector<string>&parts, Utility::pid_t ppid)
+{
+  return ::arg().configstring(true);
+}
+
 string DLRQuitHandler(const vector<string>&parts, Utility::pid_t ppid)
 {
-#ifndef WIN32
   signal(SIGALRM, dokill);
-
   alarm(1);
-
-#else
-
-  if ( !PDNSService::instance()->isRunningAsService())
-    GenerateConsoleCtrlEvent( CTRL_C_EVENT, 0 );
-  else
-    PDNSService::instance()->stop();
-  
-#endif // WIN32
-
   return "Exiting";
 }
 
@@ -89,7 +91,6 @@ string DLShowHandler(const vector<string>&parts, Utility::pid_t ppid)
   return ret;
 }
 
-static string d_status;
 
 void setStatus(const string &str)
 {
@@ -160,6 +161,35 @@ string DLCCHandler(const vector<string>&parts, Utility::pid_t ppid)
   return os.str();
 }
 
+string DLQTypesHandler(const vector<string>&parts, Utility::pid_t ppid)
+{
+  return g_rs.getQTypeReport();
+}
+
+string DLRSizesHandler(const vector<string>&parts, Utility::pid_t ppid)
+{
+  typedef map<uint16_t, uint64_t> respsizes_t;
+  respsizes_t respsizes = g_rs.getSizeResponseCounts();
+  ostringstream os;
+  boost::format fmt("%d\t%d\n");
+  BOOST_FOREACH(const respsizes_t::value_type& val, respsizes) {
+    os << (fmt % val.first % val.second).str();
+  }
+  return os.str();
+}
+
+string DLRemotesHandler(const vector<string>&parts, Utility::pid_t ppid)
+{
+  extern StatBag S;
+  typedef vector<pair<string, unsigned int> > totals_t;
+  totals_t totals = S.getRing("remotes");
+  string ret;
+  boost::format fmt("%s\t%d\n");
+  BOOST_FOREACH(totals_t::value_type& val, totals) {
+    ret += (fmt % val.first % val.second).str();
+  }
+  return ret;
+}
 
 string DLSettingsHandler(const vector<string>&parts, Utility::pid_t ppid)
 {
@@ -245,23 +275,46 @@ string DLNotifyHandler(const vector<string>&parts, Utility::pid_t ppid)
 
 string DLRediscoverHandler(const vector<string>&parts, Utility::pid_t ppid)
 {
-  PacketHandler P;
-  try {
-    L<<Logger::Error<<"Rediscovery was requested"<<endl;
-    string status="Ok";
-    P.getBackend()->rediscover(&status);
-    return status;
-  }
-  catch(AhuException &ae) {
-    return ae.reason;
-  }
-
+  UeberBackend::rediscover_all();
+  return "Ok";
 }
 
 string DLReloadHandler(const vector<string>&parts, Utility::pid_t ppid)
 {
-  PacketHandler P;
-  P.getBackend()->reload();
+  UeberBackend::reload_all();
   L<<Logger::Error<<"Reload was requested"<<endl;
   return "Ok";
+}
+
+string DLListZones(const vector<string>&parts, Utility::pid_t ppid)
+{
+  UeberBackend B;
+  L<<Logger::Notice<<"Received request to list zones."<<endl;
+  vector<DomainInfo> domains;
+  B.getAllDomains(&domains);
+  ostringstream ret;
+  int kindFilter = -1;
+  if (parts.size() > 1) {
+    if (toUpper(parts[1]) == "MASTER")
+      kindFilter = 0;
+    else if (toUpper(parts[1]) == "SLAVE")
+      kindFilter = 1;
+    else if (toUpper(parts[1]) == "NATIVE")
+      kindFilter = 2;
+  }
+
+  int count = 0;
+
+  for (vector<DomainInfo>::const_iterator di=domains.begin(); di != domains.end(); di++) {
+    if (di->kind == kindFilter || kindFilter == -1) {
+      ret<<di->zone<<endl;
+      count++;
+    }
+  }
+  if (kindFilter != -1)
+    ret<<parts[1]<<" zonecount:"<<count;
+  else
+    ret<<"All zonecount:"<<count;
+
+  return ret.str();
 }

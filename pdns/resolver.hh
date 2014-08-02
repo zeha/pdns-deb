@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,27 +24,25 @@
 #include <vector>
 #include <sys/types.h>
 #include "iputils.hh"
-#ifndef WIN32
-# include <netdb.h> 
-# include <unistd.h>
-# include <sys/time.h>
-# include <sys/uio.h>
-# include <fcntl.h>
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <arpa/inet.h>
-# undef res_mkquery
-#endif // WIN32
+#include <netdb.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <sys/uio.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#undef res_mkquery
 
-#include "ahuexception.hh"
+#include "pdnsexception.hh"
 #include "dns.hh"
 #include "namespaces.hh"
 #include "dnsbackend.hh"
 
-class ResolverException : public AhuException
+class ResolverException : public PDNSException
 {
 public:
-  ResolverException(const string &reason) : AhuException(reason){}
+  ResolverException(const string &reason) : PDNSException(reason){}
 };
 
 // make an IPv4 or IPv6 query socket 
@@ -55,12 +56,17 @@ public:
 
   typedef vector<DNSResourceRecord> res_t;
   //! synchronously resolve domain|type at IP, store result in result, rcode in ret
+  int resolve(const string &ip, const char *domain, int type, res_t* result, const ComboAddress& local);
+
   int resolve(const string &ip, const char *domain, int type, res_t* result);
-  
+
   //! only send out a resolution request
+  uint16_t sendResolve(const ComboAddress& remote, const ComboAddress& local, const char *domain, int type, bool dnssecOk=false,
+    const string& tsigkeyname="", const string& tsigalgorithm="", const string& tsigsecret="");
+
   uint16_t sendResolve(const ComboAddress& remote, const char *domain, int type, bool dnssecOk=false,
     const string& tsigkeyname="", const string& tsigalgorithm="", const string& tsigsecret="");
-  
+
   //! see if we got a SOA response from our sendResolve
   bool tryGetSOASerial(string* theirDomain, uint32_t* theirSerial, uint32_t* theirInception, uint32_t* theirExpire, uint16_t* id);
   
@@ -68,14 +74,7 @@ public:
   void getSoaSerial(const string &, const string &, uint32_t *);
   
 private:
-  int d_sock4, d_sock6;
-  
-  int d_type;
-  int d_timeout;
-  string d_domain;
-  uint16_t d_randomid;
-  
-  ComboAddress d_remote;
+  std::map<std::string, int> locals;
 };
 
 class AXFRRetriever : public boost::noncopyable

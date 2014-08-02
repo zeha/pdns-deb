@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,12 +22,9 @@
 #ifndef PACKETHANDLER_HH
 #define PACKETHANDLER_HH
 
-#ifndef WIN32
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <arpa/inet.h>
-#endif // WIN32
-
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "ueberbackend.hh"
 #include "dnspacket.hh"
 #include "packetcache.hh"
@@ -54,24 +54,6 @@ class NSEC3PARAMRecordContent;
 class PacketHandler
 {
 public:
-  template<class T> class Guard
-  {
-  public:
-    Guard(T **guard)
-    {
-      d_guard=guard;
-    }
-    
-    ~Guard()
-    {
-      if(*d_guard)
-        delete *d_guard;
-    }
-    
-  private:
-    T **d_guard;
-  };
-
   DNSPacket *questionOrRecurse(DNSPacket *, bool* shouldRecurse); //!< hand us a DNS packet with a question, we'll tell you answer, or that you should recurse
   DNSPacket *question(DNSPacket *); //!< hand us a DNS packet with a question, we give you an answer
   PacketHandler(); 
@@ -88,13 +70,9 @@ private:
   int processNotify(DNSPacket *);
   void addRootReferral(DNSPacket *r);
   int makeCanonic(DNSPacket *p, DNSPacket *r, string &target);
-  int findMboxFW(DNSPacket *p, DNSPacket *r, string &target);
-  int findUrl(DNSPacket *p, DNSPacket *r, string &target);
-  int doFancyRecords(DNSPacket *p, DNSPacket *r, string &target);
-  int doVersionRequest(DNSPacket *p, DNSPacket *r, string &target);
+  int doChaosRequest(DNSPacket *p, DNSPacket *r, string &target);
   bool addDNSKEY(DNSPacket *p, DNSPacket *r, const SOAData& sd);
   bool addNSEC3PARAM(DNSPacket *p, DNSPacket *r, const SOAData& sd);
-  bool getAuth(DNSPacket *p, SOAData *sd, const string &target, int *zoneId);
   bool getTLDAuth(DNSPacket *p, SOAData *sd, const string &target, int *zoneId);
   int doAdditionalProcessingAndDropAA(DNSPacket *p, DNSPacket *r, const SOAData& sd);
   bool doDNSSECProcessing(DNSPacket* p, DNSPacket *r);
@@ -103,12 +81,19 @@ private:
   void addNSEC3(DNSPacket *p, DNSPacket* r, const string &target, const string &wildcard, const std::string& auth, const NSEC3PARAMRecordContent& nsec3param, bool narrow, int mode);
   void emitNSEC(const std::string& before, const std::string& after, const std::string& toNSEC, const SOAData& sd, DNSPacket *r, int mode);
   void emitNSEC3(const NSEC3PARAMRecordContent &ns3rc, const SOAData& sd, const std::string& unhashed, const std::string& begin, const std::string& end, const std::string& toNSEC3, DNSPacket *r, int mode);
-  
+  int processUpdate(DNSPacket *p);
+  int forwardPacket(const string &msgPrefix, DNSPacket *p, DomainInfo *di);
+  uint performUpdate(const string &msgPrefix, const DNSRecord *rr, DomainInfo *di, bool isPresigned, bool* narrow, bool* haveNSEC3, NSEC3PARAMRecordContent *ns3pr, bool *updatedSerial);
+  int checkUpdatePrescan(const DNSRecord *rr);
+  int checkUpdatePrerequisites(const DNSRecord *rr, DomainInfo *di);
+  void increaseSerial(const string &msgPrefix, const DomainInfo *di, bool haveNSEC3, bool narrow, const NSEC3PARAMRecordContent *ns3pr);
 
   void synthesiseRRSIGs(DNSPacket* p, DNSPacket* r);
   void makeNXDomain(DNSPacket* p, DNSPacket* r, const std::string& target, const std::string& wildcard, SOAData& sd);
   void makeNOError(DNSPacket* p, DNSPacket* r, const std::string& target, const std::string& wildcard, SOAData& sd, int mode);
   vector<DNSResourceRecord> getBestReferralNS(DNSPacket *p, SOAData& sd, const string &target);
+  vector<DNSResourceRecord> getBestDNAMESynth(DNSPacket *p, SOAData& sd, string &target);
+  bool tryDNAME(DNSPacket *p, DNSPacket*r, SOAData& sd, string &target);
   bool tryReferral(DNSPacket *p, DNSPacket*r, SOAData& sd, const string &target);
 
   bool getBestWildcard(DNSPacket *p, SOAData& sd, const string &target, string &wildcard, vector<DNSResourceRecord>* ret);
@@ -117,11 +102,12 @@ private:
   void completeANYRecords(DNSPacket *p, DNSPacket*r, SOAData& sd, const string &target);
   
   static AtomicCounter s_count;
-  bool d_doFancyRecords;
+  static pthread_mutex_t s_rfc2136lock;
   bool d_doRecursion;
-  bool d_doCNAME;
   bool d_logDNSDetails;
   bool d_doIPv6AdditionalProcessing;
+  bool d_doDNAME;
+  int d_sendRootReferral;
   AuthLua* d_pdl;
 
   UeberBackend B; // every thread an own instance

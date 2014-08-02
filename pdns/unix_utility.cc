@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -21,12 +25,13 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h> 
-#include "ahuexception.hh"
+#include "pdnsexception.hh"
 #include "logger.hh"
 #include "misc.hh"
 #include <pwd.h>
 #include <grp.h>
 #include <sys/types.h>
+#include <sys/select.h>
 
 #ifdef NEED_INET_NTOP_PROTO
 extern "C" {
@@ -44,7 +49,37 @@ int Utility::closesocket( Utility::sock_t socket )
   if(ret < 0 && errno == ECONNRESET) // see ticket 192, odd BSD behaviour
     return 0;
   if(ret < 0) 
-    throw AhuException("Error closing socket: "+stringerror());
+    throw PDNSException("Error closing socket: "+stringerror());
+  return ret;
+}
+
+// Connects to socket with timeout
+int Utility::timed_connect( Utility::sock_t sock,
+    const sockaddr *addr,
+    Utility::socklen_t sockaddr_size,
+    int timeout_sec,
+    int timeout_usec )
+{
+  fd_set set;
+  struct timeval timeout;
+  int ret;
+
+  timeout.tv_sec = timeout_sec;
+  timeout.tv_usec = timeout_usec;
+
+  FD_ZERO(&set);
+  FD_SET(sock, &set);
+
+  setNonBlocking(sock);
+
+  if ((ret = connect (sock, addr, sockaddr_size)) < 0) {
+    if (errno != EINPROGRESS)
+      return ret;
+  }
+
+  ret = select(sock + 1, NULL, &set, NULL, &timeout);
+  setBlocking(sock);
+
   return ret;
 }
 
@@ -88,8 +123,8 @@ void Utility::usleep(unsigned long usec)
 }
 
 
-// Drops the program's privileges.
-void Utility::dropPrivs( int uid, int gid )
+// Drops the program's group privileges.
+void Utility::dropGroupPrivs( int uid, int gid )
 {
   if(gid) {
     if(setgid(gid)<0) {
@@ -113,7 +148,12 @@ void Utility::dropPrivs( int uid, int gid )
       }
     }
   }
+}
 
+
+// Drops the program's user privileges.
+void Utility::dropUserPrivs( int uid )
+{
   if(uid) {
     if(setuid(uid)<0) {
       theL()<<Logger::Critical<<"Unable to set effective user id to "<<uid<<":  "<<stringerror()<<endl;
@@ -254,9 +294,9 @@ time_t Utility::timegm(struct tm *const t)
   /* Days since 1970 is 365 * number of years + number of leap years since 1970 */
   day  = years * 365 + (years + 1) / 4;
 
-  /* After 2100 we have to substract 3 leap years for every 400 years
+  /* After 2100 we have to subtract 3 leap years for every 400 years
      This is not intuitive. Most mktime implementations do not support
-     dates after 2059, anyway, so we might leave this out for it's
+     dates after 2059, anyway, so we might leave this out for its
      bloat. */
   if ((years -= 131) >= 0) {
     years /= 100;
@@ -277,6 +317,8 @@ time_t Utility::timegm(struct tm *const t)
   return ((day + t->tm_hour) * i + t->tm_min) * i + t->tm_sec;
 }
 
+// we have our own gmtime_r because the one in GNU libc violates POSIX/SuS
+// by supporting leap seconds when TZ=right/UTC
 void Utility::gmtime_r(const time_t *timer, struct tm *tmbuf) {
 
   int monthdays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};

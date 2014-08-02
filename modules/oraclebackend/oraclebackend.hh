@@ -65,23 +65,29 @@ public:
   void alsoNotifies(const string &domain, set<string> *addrs);
   void getUnfreshSlaveInfos(vector<DomainInfo>* domains);
   void getUpdatedMasters(vector<DomainInfo>* domains);
-  void setFresh(uint32_t zoneId); // No, it's not int zoneId. Really.
-  void setNotified(uint32_t zoneId, uint32_t serial); // ditto
-  bool list(const string &domain, int zoneId);
+  void setFresh(uint32_t zoneId);
+  void setNotified(uint32_t zoneId, uint32_t serial);
+  bool list(const string &domain, int zoneId, bool include_disabled=false);
   bool startTransaction(const string &domain, int zoneId);
   bool feedRecord(const DNSResourceRecord &rr, string* ordername);
   bool commitTransaction();
   bool abortTransaction();
   bool superMasterBackend(const string &ip, const string &domain,
                           const vector<DNSResourceRecord> &nsset,
-                          string *account, DNSBackend **backend);
+                          string *account, string *nameserver,
+                          DNSBackend **backend);
   bool createSlaveDomain(const string &ip, const string &domain,
-                         const string &account);
+                         const string &nameserver, const string &account);
 
+  bool getAllDomainMetadata(const string& name, std::map<std::string, std::vector<std::string> >& meta); 
   bool getDomainMetadata(const string& name, const std::string& kind, std::vector<std::string>& meta);
   bool setDomainMetadata(const string& name, const std::string& kind, const std::vector<std::string>& meta);
 
   bool getTSIGKey(const string& name, string* algorithm, string* content);
+  bool delTSIGKey(const string& name);
+  bool setTSIGKey(const string& name, const string& algorithm, const string& content);
+  bool getTSIGKeys(std::vector< struct TSIGKey > &keys);
+
   bool getDomainKeys(const string& name, unsigned int kind, vector<KeyData>& keys);
   bool removeDomainKey(const string& name, unsigned int id);
   int addDomainKey(const string& name, const KeyData& key);
@@ -122,11 +128,16 @@ private:
   string prevNextNameQuerySQL;
   string prevNextHashQuerySQL;
 
+  string getAllZoneMetadataQuerySQL;
   string getZoneMetadataQuerySQL;
   string delZoneMetadataQuerySQL;
   string setZoneMetadataQuerySQL;
 
   string getTSIGKeyQuerySQL;
+  string delTSIGKeyQuerySQL;
+  string setTSIGKeyQuerySQL;
+  string getTSIGKeysQuerySQL;
+
   string getZoneKeysQuerySQL;
   string delZoneKeyQuerySQL;
   string addZoneKeyQuerySQL;

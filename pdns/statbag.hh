@@ -1,11 +1,14 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2002  PowerDNS.COM BV
+    Copyright (C) 2002 - 2014  PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -35,7 +38,6 @@ public:
     Lock l(d_lock);
     d_items[d_pos++ % d_size]=item;
   }
-
 
   unsigned int getSize()
   {
@@ -83,6 +85,7 @@ public:
   }
 
   vector<string>listRings();
+  bool ringExists(const string &name);
   void resetRing(const string &name);
   void resizeRing(const string &name, unsigned int newsize);
   unsigned int getRingSize(const string &name);

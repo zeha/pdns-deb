@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -28,14 +31,11 @@
 #include <sstream>
 #include "iputils.hh"
 #include <boost/utility.hpp>
-#ifndef WIN32
 #include <unistd.h>
 #include <sys/un.h>
 #include <dlfcn.h>
-
 #include <sys/socket.h>
 #include <netinet/in.h>
-#endif // WIN32
 
 #include "namespaces.hh"
 
@@ -57,7 +57,7 @@ public:
   static void registerRestFunc(g_funk_t *gf);
   static g_funk_t* getFunc(const string& fname) { return s_funcdb[fname].func; } 
 private:
-  void sendLine(const string &line);
+  void sendlines(const string &lines);
   string getHelp();
   string getLine();
 
@@ -65,13 +65,6 @@ private:
   void listenOnTCP(const ComboAddress&);
   void createSocketAndBind(int family, struct sockaddr*local, size_t len);
 
-#ifndef WIN32
-  struct sockaddr_un d_remote;
-#else
-  HANDLE m_pipeHandle;
-#endif // WIN32
-  
-  Utility::socklen_t d_addrlen;
   NetmaskGroup d_tcprange;
   int d_s;
   int d_client;

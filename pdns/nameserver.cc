@@ -5,6 +5,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation.
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -23,6 +27,7 @@
 #include <iostream>
 #include <string>
 #include <sys/types.h>
+#include "responsestats.hh"
 #include <boost/shared_ptr.hpp>
 #include "dns.hh"
 #include "dnsbackend.hh"
@@ -47,7 +52,7 @@ extern StatBag S;
     \section overview High level overview
 
     The Distributor contains a configurable number of PacketHandler instances, each in its own thread, for connection pooling. 
-    PacketHandler instances are recycled of they let escape an AhuException.
+    PacketHandler instances are recycled of they let escape an PDNSException.
 
     The PacketHandler implements the RFC1034 algorithm and converts question packets into DNSBackend queries.
 
@@ -76,10 +81,9 @@ extern StatBag S;
     The main() of PowerDNS can be found in receiver.cc - start reading there for further insights into the operation of the nameserver
 */
 
-#ifdef IP_PKTINFO
+#if defined(IP_PKTINFO)
   #define GEN_IP_PKTINFO IP_PKTINFO
-#endif
-#ifdef IP_RECVDSTADDR
+#elif defined(IP_RECVDSTADDR)
   #define GEN_IP_PKTINFO IP_RECVDSTADDR 
 #endif
 
@@ -89,9 +93,10 @@ void UDPNameserver::bindIPv4()
 {
   vector<string>locals;
   stringtok(locals,::arg()["local-address"]," ,");
+  int one = 1;
 
   if(locals.empty())
-    throw AhuException("No local address specified");
+    throw PDNSException("No local address specified");
 
   int s;
   for(vector<string>::const_iterator i=locals.begin();i!=locals.end();++i) {
@@ -100,40 +105,47 @@ void UDPNameserver::bindIPv4()
 
     s=socket(AF_INET,SOCK_DGRAM,0);
 
-    if(s<0)
-      throw AhuException("Unable to acquire a UDP socket: "+string(strerror(errno)));
+    if(s<0) {
+      L<<Logger::Error<<"Unable to acquire a UDP socket: "+string(strerror(errno)) << endl;
+      throw PDNSException("Unable to acquire a UDP socket: "+string(strerror(errno)));
+    }
   
     Utility::setCloseOnExec(s);
   
     if(!Utility::setNonBlocking(s))
-      throw AhuException("Unable to set UDP socket to non-blocking: "+stringerror());
+      throw PDNSException("Unable to set UDP socket to non-blocking: "+stringerror());
   
     memset(&locala,0,sizeof(locala));
     locala.sin4.sin_family=AF_INET;
 
-    if(localname=="0.0.0.0") {
-      int val=1;
-      setsockopt(s, IPPROTO_IP, GEN_IP_PKTINFO, &val, sizeof(val));
-      locala.sin4.sin_addr.s_addr = INADDR_ANY;
-    }
-    else
-    {
-      struct hostent *h=0;
-      h=gethostbyname(localname.c_str());
-      if(!h)
-        throw AhuException("Unable to resolve local address"); 
+    if(localname=="0.0.0.0")
+      setsockopt(s, IPPROTO_IP, GEN_IP_PKTINFO, &one, sizeof(one));
 
-      locala.sin4.sin_addr.s_addr=*(int*)h->h_addr;
-    }
+#ifdef SO_REUSEPORT
+    if( d_can_reuseport )
+        if( setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &one, sizeof(one)) )
+          d_can_reuseport = false;
+#endif
 
-    locala.sin4.sin_port=htons(::arg().asNum("local-port"));
-    g_localaddresses.push_back(locala);
+    locala=ComboAddress(localname, ::arg().asNum("local-port"));
+    if(locala.sin4.sin_family != AF_INET) 
+      throw PDNSException("Attempting to bind IPv4 socket to IPv6 address");
+
+    if( !d_additional_socket )
+        g_localaddresses.push_back(locala);
+
     if(::bind(s, (sockaddr*)&locala, locala.getSocklen()) < 0) {
-      L<<Logger::Error<<"binding UDP socket to '"+localname+"' port "+lexical_cast<string>(ntohs(locala.sin4.sin_port))+": "<<strerror(errno)<<endl;
-      throw AhuException("Unable to bind to UDP socket");
+      close(s);
+      if( errno == EADDRNOTAVAIL && ! ::arg().mustDo("local-address-nonexist-fail") ) {
+        L<<Logger::Error<<"IPv4 Address " << localname << " does not exist on this server - skipping UDP bind" << endl;
+        continue;
+      } else {
+        L<<Logger::Error<<"binding UDP socket to '"+locala.toStringWithPort()+": "<<strerror(errno)<<endl;
+        throw PDNSException("Unable to bind to UDP socket");
+      }
     }
     d_sockets.push_back(s);
-    L<<Logger::Error<<"UDP server bound to "<<inet_ntoa(locala.sin4.sin_addr)<<":"<<::arg().asNum("local-port")<<endl;
+    L<<Logger::Error<<"UDP server bound to "<<locala.toStringWithPort()<<endl;
     struct pollfd pfd;
     pfd.fd = s;
     pfd.events = POLLIN;
@@ -161,11 +173,11 @@ bool AddressIsUs(const ComboAddress& remote)
     if(IsAnyAddress(us)) {
       int s = socket(remote.sin4.sin_family, SOCK_DGRAM, 0);
       if(s < 0) 
-	continue;
+        continue;
 
       if(connect(s, (struct sockaddr*)&remote, remote.getSocklen()) < 0) {
-	close(s);
-	continue;
+        close(s);
+        continue;
       }
     
       ComboAddress actualLocal;
@@ -173,13 +185,13 @@ bool AddressIsUs(const ComboAddress& remote)
       socklen_t socklen = actualLocal.getSocklen();
 
       if(getsockname(s, (struct sockaddr*) &actualLocal, &socklen) < 0) {
-	close(s);
-	continue;
+        close(s);
+        continue;
       }
       close(s);
       actualLocal.sin4.sin_port = us.sin4.sin_port;
       if(actualLocal == remote)
-	return true;
+        return true;
     }
   }
   return false;
@@ -188,9 +200,10 @@ bool AddressIsUs(const ComboAddress& remote)
 
 void UDPNameserver::bindIPv6()
 {
-#if !WIN32 && HAVE_IPV6
+#if HAVE_IPV6
   vector<string> locals;
   stringtok(locals,::arg()["local-ipv6"]," ,");
+  int one=1;
 
   if(locals.empty())
     return;
@@ -200,26 +213,41 @@ void UDPNameserver::bindIPv6()
     string localname(*i);
 
     s=socket(AF_INET6,SOCK_DGRAM,0);
-    if(s<0)
-      throw AhuException("Unable to acquire a UDPv6 socket: "+string(strerror(errno)));
+    if(s<0) {
+      L<<Logger::Error<<"Unable to acquire a UDPv6 socket: "+string(strerror(errno)) << endl;
+      throw PDNSException("Unable to acquire a UDPv6 socket: "+string(strerror(errno)));
+    }
 
     Utility::setCloseOnExec(s);
     if(!Utility::setNonBlocking(s))
-      throw AhuException("Unable to set UDPv6 socket to non-blocking: "+stringerror());
+      throw PDNSException("Unable to set UDPv6 socket to non-blocking: "+stringerror());
 
 
     ComboAddress locala(localname, ::arg().asNum("local-port"));
     
     if(IsAnyAddress(locala)) {
-      int val=1;
-      setsockopt(s, IPPROTO_IP, GEN_IP_PKTINFO, &val, sizeof(val));     // linux supports this, so why not - might fail on other systems
-      setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &val, sizeof(val)); 
-      setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &val, sizeof(val));      // if this fails, we report an error in tcpreceiver too
+      setsockopt(s, IPPROTO_IP, GEN_IP_PKTINFO, &one, sizeof(one));     // linux supports this, so why not - might fail on other systems
+      setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &one, sizeof(one)); 
+      setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &one, sizeof(one));      // if this fails, we report an error in tcpreceiver too
     }
-    g_localaddresses.push_back(locala);
+
+#ifdef SO_REUSEPORT
+    if( d_can_reuseport )
+        if( setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &one, sizeof(one)) )
+          d_can_reuseport = false;
+#endif
+
+    if( !d_additional_socket )
+        g_localaddresses.push_back(locala);
     if(::bind(s, (sockaddr*)&locala, sizeof(locala))<0) {
-      L<<Logger::Error<<"binding to UDP ipv6 socket: "<<strerror(errno)<<endl;
-      throw AhuException("Unable to bind to UDP ipv6 socket");
+      close(s);
+      if( errno == EADDRNOTAVAIL && ! ::arg().mustDo("local-ipv6-nonexist-fail") ) {
+        L<<Logger::Error<<"IPv6 Address " << localname << " does not exist on this server - skipping UDP bind" << endl;
+        continue;
+      } else {
+        L<<Logger::Error<<"binding to UDP ipv6 socket "<< localname <<": "<<strerror(errno)<<endl;
+        throw PDNSException("Unable to bind to UDP ipv6 socket");
+      }
     }
     d_sockets.push_back(s);
     struct pollfd pfd;
@@ -230,11 +258,17 @@ void UDPNameserver::bindIPv6()
     L<<Logger::Error<<"UDPv6 server bound to "<<locala.toStringWithPort()<<endl;
     
   }
-#endif // WIN32
+#endif
 }
 
-UDPNameserver::UDPNameserver()
+UDPNameserver::UDPNameserver( bool additional_socket )
 {
+#ifdef SO_REUSEPORT
+  d_can_reuseport = ::arg().mustDo("reuseport");
+#endif
+  // Are we the main socket (false) or a rebinding using SO_REUSEPORT ?
+  d_additional_socket = additional_socket;
+
   if(!::arg()["local-address"].empty())
     bindIPv4();
   if(!::arg()["local-ipv6"].empty())
@@ -243,15 +277,40 @@ UDPNameserver::UDPNameserver()
   if(::arg()["local-address"].empty() && ::arg()["local-ipv6"].empty()) 
     L<<Logger::Critical<<"PDNS is deaf and mute! Not listening on any interfaces"<<endl;    
 }
+
+ResponseStats g_rs;
+
 void UDPNameserver::send(DNSPacket *p)
 {
   const string& buffer=p->getString();
-  
+  static unsigned int &numanswered=*S.getPointer("udp-answers");
+  static unsigned int &numanswered4=*S.getPointer("udp4-answers");
+  static unsigned int &numanswered6=*S.getPointer("udp6-answers");
+  static unsigned int &bytesanswered=*S.getPointer("udp-answers-bytes");
+
+  g_rs.submitResponse(p->qtype.getCode(), buffer.length(), true);
+
   struct msghdr msgh;
-  struct cmsghdr *cmsg;
   struct iovec iov;
   char cbuf[256];
-  
+
+  /* Query statistics */
+  if(p->d.aa) {
+    if (p->d.rcode==RCode::NXDomain)
+      S.ringAccount("nxdomain-queries",p->qdomain+"/"+p->qtype.getName());
+  } else if (p->isEmpty()) {
+    S.ringAccount("unauth-queries",p->qdomain+"/"+p->qtype.getName());
+    S.ringAccount("remotes-unauth",p->getRemote());
+  }
+
+  /* Count responses (total/v4/v6) and byte counts */
+  numanswered++;
+  bytesanswered+=buffer.length();
+  if(p->d_remote.sin4.sin_family==AF_INET)
+    numanswered4++;
+  else
+    numanswered6++;
+
   /* Set up iov and msgh structures. */
   memset(&msgh, 0, sizeof(struct msghdr));
   iov.iov_base = (void*)buffer.c_str();
@@ -262,60 +321,14 @@ void UDPNameserver::send(DNSPacket *p)
   msgh.msg_namelen = p->d_remote.getSocklen();
 
   if(p->d_anyLocal) {
-    if(p->d_anyLocal->sin4.sin_family == AF_INET6) {
-      struct in6_pktinfo *pkt;
-          
-      msgh.msg_control = cbuf;
-      msgh.msg_controllen = CMSG_SPACE(sizeof(*pkt));
-                  
-      cmsg = CMSG_FIRSTHDR(&msgh);
-      cmsg->cmsg_level = IPPROTO_IPV6;
-      cmsg->cmsg_type = IPV6_PKTINFO;
-      cmsg->cmsg_len = CMSG_LEN(sizeof(*pkt));
-                                  
-      pkt = (struct in6_pktinfo *) CMSG_DATA(cmsg);
-      memset(pkt, 0, sizeof(*pkt));
-      pkt->ipi6_addr = p->d_anyLocal->sin6.sin6_addr;
-      msgh.msg_controllen = cmsg->cmsg_len; // makes valgrind happy and is slightly better style
-    }
-    else {
-#ifdef IP_PKTINFO
-      struct in_pktinfo *pkt;
-      msgh.msg_control = cbuf;
-      msgh.msg_controllen = CMSG_SPACE(sizeof(*pkt));
-
-      cmsg = CMSG_FIRSTHDR(&msgh);
-      cmsg->cmsg_level = IPPROTO_IP;
-      cmsg->cmsg_type = IP_PKTINFO;
-      cmsg->cmsg_len = CMSG_LEN(sizeof(*pkt));
-
-      pkt = (struct in_pktinfo *) CMSG_DATA(cmsg);
-      memset(pkt, 0, sizeof(*pkt));
-      pkt->ipi_spec_dst = p->d_anyLocal->sin4.sin_addr;
-#endif
-#ifdef IP_SENDSRCADDR
-      struct in_addr *in;
-    
-      msgh.msg_control = cbuf;
-      msgh.msg_controllen = CMSG_SPACE(sizeof(*in));
-            
-      cmsg = CMSG_FIRSTHDR(&msgh);
-      cmsg->cmsg_level = IPPROTO_IP;
-      cmsg->cmsg_type = IP_SENDSRCADDR;
-      cmsg->cmsg_len = CMSG_LEN(sizeof(*in));
-                            
-      in = (struct in_addr *) CMSG_DATA(cmsg);
-      *in = p->d_anyLocal->sin4.sin_addr;
-#endif
-      msgh.msg_controllen = cmsg->cmsg_len;
-    }
+    addCMsgSrcAddr(&msgh, cbuf, p->d_anyLocal.get_ptr());
   }
   DLOG(L<<Logger::Notice<<"Sending a packet to "<< p->getRemote() <<" ("<< buffer.length()<<" octets)"<<endl);
   if(buffer.length() > p->getMaxReplyLen()) {
-    cerr<<"Weird, trying to send a message that needs truncation, "<< buffer.length()<<" > "<<p->getMaxReplyLen()<<endl;
+    L<<Logger::Error<<"Weird, trying to send a message that needs truncation, "<< buffer.length()<<" > "<<p->getMaxReplyLen()<<endl;
   }
   if(sendmsg(p->getSocket(), &msgh, 0) < 0)
-    L<<Logger::Error<<"Error sending reply with sendmsg (socket="<<p->getSocket()<<"): "<<strerror(errno)<<endl;
+    L<<Logger::Error<<"Error sending reply with sendmsg (socket="<<p->getSocket()<<", dest="<<p->d_remote.toStringWithPort()<<"): "<<strerror(errno)<<endl;
 }
 
 static bool HarvestDestinationAddress(struct msghdr* msgh, ComboAddress* destination)
@@ -323,15 +336,14 @@ static bool HarvestDestinationAddress(struct msghdr* msgh, ComboAddress* destina
   memset(destination, 0, sizeof(*destination));
   struct cmsghdr *cmsg;
   for (cmsg = CMSG_FIRSTHDR(msgh); cmsg != NULL; cmsg = CMSG_NXTHDR(msgh,cmsg)) {
-#ifdef IP_PKTINFO
+#if defined(IP_PKTINFO)
      if ((cmsg->cmsg_level == IPPROTO_IP) && (cmsg->cmsg_type == IP_PKTINFO)) {
         struct in_pktinfo *i = (struct in_pktinfo *) CMSG_DATA(cmsg);
         destination->sin4.sin_addr = i->ipi_addr;
         destination->sin4.sin_family = AF_INET;
         return true;
     }
-#endif
-#ifdef IP_RECVDSTADDR
+#elif defined(IP_RECVDSTADDR)
     if ((cmsg->cmsg_level == IPPROTO_IP) && (cmsg->cmsg_type == IP_RECVDSTADDR)) {
       struct in_addr *i = (struct in_addr *) CMSG_DATA(cmsg);
       destination->sin4.sin_addr = *i;
@@ -355,9 +367,9 @@ DNSPacket *UDPNameserver::receive(DNSPacket *prefilled)
   ComboAddress remote;
   extern StatBag S;
   int len=-1;
-  char mesg[512];
+  char mesg[DNSPacket::s_udpTruncationThreshold];
   Utility::sock_t sock=-1;
-    
+
   struct msghdr msgh;
   struct iovec iov;
   char cbuf[256];
@@ -395,21 +407,23 @@ DNSPacket *UDPNameserver::receive(DNSPacket *prefilled)
   BOOST_FOREACH(struct pollfd &pfd, rfds) {
     if(pfd.revents & POLLIN) {
       sock=pfd.fd;        
-      len=0;
-        
       if((len=recvmsg(sock, &msgh, 0)) < 0 ) {
-	if(errno != EAGAIN)
-	  L<<Logger::Error<<"recvfrom gave error, ignoring: "<<strerror(errno)<<endl;
-	return 0;
+        if(errno != EAGAIN)
+          L<<Logger::Error<<"recvfrom gave error, ignoring: "<<strerror(errno)<<endl;
+        return 0;
       }
       break;
     }
   }
   if(sock==-1)
-    throw AhuException("poll betrayed us! (should not happen)");
+    throw PDNSException("poll betrayed us! (should not happen)");
   
-
   DLOG(L<<"Received a packet " << len <<" bytes long from "<< remote.toString()<<endl);
+
+  BOOST_STATIC_ASSERT(offsetof(sockaddr_in, sin_port) == offsetof(sockaddr_in6, sin6_port));
+
+  if(remote.sin4.sin_port == 0) // would generate error on responding. sin4 also works for ipv6
+    return 0;
   
   DNSPacket *packet;
   if(prefilled)  // they gave us a preallocated packet
@@ -424,7 +438,7 @@ DNSPacket *UDPNameserver::receive(DNSPacket *prefilled)
   if(HarvestDestinationAddress(&msgh, &dest)) {
 //    cerr<<"Setting d_anyLocal to '"<<dest.toString()<<"'"<<endl;
     packet->d_anyLocal = dest;
-  }  	  
+  }            
 
   if(packet->parse(mesg, len)<0) {
     S.inc("corrupt-packets");

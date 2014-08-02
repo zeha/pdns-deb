@@ -34,7 +34,7 @@ public:
         ~GeoBackend();
         
         virtual void lookup(const QType &qtype, const string &qdomain, DNSPacket *pkt_p=0, int zoneId=-1);
-        virtual bool list(const string &target, int domain_id);
+        virtual bool list(const string &target, int domain_id, bool include_disabled=false);
         virtual bool get(DNSResourceRecord &r);
         virtual bool getSOA(const string &name, SOAData &soadata, DNSPacket *p=0);
         
@@ -88,7 +88,7 @@ public:
         
         void declareArguments(const string &suffix = "") {
         	declare(suffix, "zone", "zonename to be served", "");
-        	declare(suffix, "soa-values", "values of the SOA master nameserver and hostmaster fields, comma seperated", "");
+        	declare(suffix, "soa-values", "values of the SOA master nameserver and hostmaster fields, comma separated", "");
         	declare(suffix, "ns-records", "targets of the NS records, comma separated.", "");
         	declare(suffix, "ttl", "TTL value for geo records", "3600");
         	declare(suffix, "ns-ttl", "TTL value for NS records", "86400");
@@ -105,9 +105,7 @@ class GeoLoader {
 public:
         GeoLoader() {
         	BackendMakers().report(new GeoFactory);
-        	
-        	L << Logger::Info << "[GeoBackend] This is the geobackend ("
-        		__DATE__", "__TIME__" - $Revision: 1.1 $) reporting" << endl;
+		L << Logger::Info << "[geobackend] This is the geo backend version " VERSION " (" __DATE__ ", " __TIME__ ") reporting" << endl;
         }
 };
 

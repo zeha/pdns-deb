@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,20 +29,18 @@ class DNSPacket;
 #include <vector>
 #include <map>
 #include <sys/types.h>
-#include "ahuexception.hh"
+#include "pdnsexception.hh"
 #include <set>
 #include <iostream>
-
-#ifndef WIN32
-# include <sys/socket.h>
-# include <dirent.h>
-#endif // WIN32
-
+#include <sys/socket.h>
+#include <dirent.h>
+#include "misc.hh"
 #include "qtype.hh"
 #include "dns.hh"
 #include <vector>
 #include "namespaces.hh"
-  
+#include "comment.hh"
+
 class DNSBackend;  
 struct DomainInfo
 {
@@ -50,17 +51,44 @@ struct DomainInfo
   uint32_t notified_serial;
   uint32_t serial;
   time_t last_check;
-  enum {Master,Slave,Native} kind;
+  enum DomainKind { Master, Slave, Native } kind;
   DNSBackend *backend;
   
   bool operator<(const DomainInfo& rhs) const
   {
     return zone < rhs.zone;
   }
+
+  const char *getKindString() const
+  {
+    return DomainInfo::getKindString(kind);
+  }
+
+  static const char *getKindString(enum DomainKind kind)
+  {
+    const char *kinds[]={"Master", "Slave", "Native"};
+    return kinds[kind];
+  }
+
+  static DomainKind stringToKind(const string& kind)
+  {
+    if(pdns_iequals(kind,"SLAVE"))
+      return DomainInfo::Slave;
+    else if(pdns_iequals(kind,"MASTER"))
+      return DomainInfo::Master;
+    else
+      return DomainInfo::Native;
+  }
+
+};
+
+struct TSIGKey {
+   std::string name;
+   std::string algorithm;
+   std::string key;
 };
 
 class DNSPacket;
-
 
 //! This virtual base class defines the interface for backends for the ahudns. 
 /** To create a backend, inherit from this class and implement functions for all virtual methods.
@@ -70,7 +98,7 @@ class DNSPacket;
     issues should lead to DBExceptions.
 
     More serious errors, which may indicate that the database connection is hosed, or a configuration error occurred, should
-    lead to the throwing of an AhuException. This exception will fall straight through the UeberBackend and the PacketHandler
+    lead to the throwing of an PDNSException. This exception will fall straight through the UeberBackend and the PacketHandler
     and be caught by the Distributor, which will delete your DNSBackend instance and spawn a new one.
 */
 class DNSBackend
@@ -80,13 +108,12 @@ public:
   virtual void lookup(const QType &qtype, const string &qdomain, DNSPacket *pkt_p=0, int zoneId=-1)=0; 
   virtual bool get(DNSResourceRecord &)=0; //!< retrieves one DNSResource record, returns false if no more were available
 
-
   //! Initiates a list of the specified domain
   /** Once initiated, DNSResourceRecord objects can be retrieved using get(). Should return false
       if the backend does not consider itself responsible for the id passed.
       \param domain_id ID of which a list is requested
   */
-  virtual bool list(const string &target, int domain_id)=0;  
+  virtual bool list(const string &target, int domain_id, bool include_disabled=false)=0;
 
   virtual ~DNSBackend(){};
 
@@ -101,11 +128,41 @@ public:
     return false;
   }
 
-  // the DNSSEC related (getDomainMetadata has broader uses too)
-  virtual bool getDomainMetadata(const string& name, const std::string& kind, std::vector<std::string>& meta) { return false; }
-  virtual bool setDomainMetadata(const string& name, const std::string& kind, const std::vector<std::string>& meta) {return false;}
+  virtual bool listSubZone(const string &zone, int domain_id)
+  {
+    return false;
+  }
 
-  virtual void getAllDomains(vector<DomainInfo> *domains) { }
+  // the DNSSEC related (getDomainMetadata has broader uses too)
+  bool isDnssecDomainMetadata (const string& name) {
+    return (name == "PRESIGNED" || name == "NSEC3PARAM" || name == "NSEC3NARROW");
+  }
+  virtual bool getAllDomainMetadata(const string& name, std::map<std::string, std::vector<std::string> >& meta) { return false; };
+  virtual bool getDomainMetadata(const string& name, const std::string& kind, std::vector<std::string>& meta) { return false; }
+  virtual bool getDomainMetadataOne(const string& name, const std::string& kind, std::string& value)
+  {
+    std::vector<std::string> meta;
+    if (getDomainMetadata(name, kind, meta)) {
+      if(!meta.empty()) {
+        value = *meta.begin();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  virtual bool setDomainMetadata(const string& name, const std::string& kind, const std::vector<std::string>& meta) {return false;}
+  virtual bool setDomainMetadataOne(const string& name, const std::string& kind, const std::string& value)
+  {
+    const std::vector<std::string> meta(1, value);
+    return setDomainMetadata(name, kind, meta);
+  }
+
+
+  virtual void getAllDomains(vector<DomainInfo> *domains, bool include_disabled=false) { }
+
+  /** Determines if we are authoritative for a zone, and at what level */
+  virtual bool getAuth(DNSPacket *p, SOAData *sd, const string &target, int *zoneId, const int best_match_len);
 
   struct KeyData {
     unsigned int id;
@@ -121,6 +178,9 @@ public:
   virtual bool deactivateDomainKey(const string& name, unsigned int id) { return false; }
 
   virtual bool getTSIGKey(const string& name, string* algorithm, string* content) { return false; }
+  virtual bool setTSIGKey(const string& name, const string& algorithm, const string& content) { return false; }
+  virtual bool deleteTSIGKey(const string& name) { return false; }
+  virtual bool getTSIGKeys(std::vector< struct TSIGKey > &keys) { return false; }
 
   virtual bool getBeforeAndAfterNamesAbsolute(uint32_t id, const std::string& qname, std::string& unhashed, std::string& before, std::string& after)
   {
@@ -129,7 +189,7 @@ public:
     return false;
   }
 
-  bool getBeforeAndAfterNames(uint32_t id, const std::string& zonename, const std::string& qname, std::string& before, std::string& after);
+  virtual bool getBeforeAndAfterNames(uint32_t id, const std::string& zonename, const std::string& qname, std::string& before, std::string& after);
 
   virtual bool updateDNSSECOrderAndAuth(uint32_t domain_id, const std::string& zonename, const std::string& qname, bool auth)
   {
@@ -168,6 +228,26 @@ public:
 
   // end DNSSEC
 
+  // comments support
+  virtual bool listComments(uint32_t domain_id)
+  {
+    return false; // unsupported by this backend
+  }
+
+  virtual bool getComment(Comment& comment)
+  {
+    return false;
+  }
+
+  virtual void feedComment(const Comment& comment)
+  {
+  }
+
+  virtual bool replaceComments(const uint32_t domain_id, const string& qname, const QType& qt, const vector<Comment>& comments)
+  {
+    return false;
+  }
+
   //! returns true if master ip is master for domain name.
   virtual bool isMaster(const string &name, const string &ip)
   {
@@ -205,11 +285,11 @@ public:
   {
     return false; // no problem!
   }
-  virtual bool feedEnts(int domain_id, set<string> &nonterm)
+  virtual bool feedEnts(int domain_id, map<string,bool> &nonterm)
   {
     return false;
   }
-  virtual bool feedEnts3(int domain_id, const string &domain, set<string> &nonterm, unsigned int times, const string &salt, bool narrow)
+  virtual bool feedEnts3(int domain_id, const string &domain, map<string,bool> &nonterm, unsigned int times, const string &salt, bool narrow)
   {
     return false;
   }
@@ -244,17 +324,52 @@ public:
   {
   }
 
+  //! Called when the Master of a domain should be changed
+  virtual bool setMaster(const string &domain, const string &ip)
+  {
+    return false;
+  }
+
+  //! Called when the Kind of a domain should be changed (master -> native and similar)
+  virtual bool setKind(const string &domain, const DomainInfo::DomainKind kind)
+  {
+    return false;
+  }
+
   //! Can be called to seed the getArg() function with a prefix
   void setArgPrefix(const string &prefix);
 
   //! determine if ip is a supermaster or a domain
-  virtual bool superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *account, DNSBackend **db)
+  virtual bool superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *nameserver, string *account, DNSBackend **db)
+  {
+    return false;
+  }
+
+  //! called by PowerDNS to create a new domain
+  virtual bool createDomain(const string &domain)
   {
     return false;
   }
 
   //! called by PowerDNS to create a slave record for a superMaster
-  virtual bool createSlaveDomain(const string &ip, const string &domain, const string &account)
+  virtual bool createSlaveDomain(const string &ip, const string &domain, const string &nameserver, const string &account)
+  {
+    return false;
+  }
+
+  //! called to delete a domain, incl. all metadata, zone contents, etc.
+  virtual bool deleteDomain(const string &domain)
+  {
+    return false;
+  }
+
+  //! called to get a NSECx record from backend
+  virtual bool getDirectNSECx(uint32_t id, const string &hashed, const QType &qtype, string &before, DNSResourceRecord &rr)
+  {
+    return false;
+  }
+  //! called to get RRSIG record(s) from backend
+  virtual bool getDirectRRSIGs(const string &signer, const string &qname, const QType &qtype, vector<DNSResourceRecord> &rrsigs)
   {
     return false;
   }
@@ -268,6 +383,37 @@ protected:
 
 private:
   string d_prefix;
+};
+
+class DNSReversedBackend : public DNSBackend {
+    public:
+        /* Given rev_zone (the reversed name of the zone we are looking for the
+         * SOA record for), return the equivalent of
+         *     SELECT name
+         *     FROM soa_records
+         *     WHERE name <= rev_zone
+         *     ORDER BY name DESC
+         *
+         * ie we want either an exact hit on the record, or the immediately
+         * preceding record when sorted lexographically.
+         *
+         * Return true if something has been found, false if not
+         */
+        virtual bool getAuthZone( string &rev_zone ) { return false; };  // Must be overridden
+
+        /* Once the record has been found, this will be called to get the data
+         * associated with the record so the backend can set up soa and zoneId
+         * respectively.  soa->qname does not need to be set. Return false if
+         * there is a problem getting the data.
+         * */
+        virtual bool getAuthData( SOAData &soa, DNSPacket *p=0) { return false; };  // Must be overridden
+
+        bool getAuth(DNSPacket *p, SOAData *soa, const string &inZone, int *zoneId, const int best_match_len);
+        inline int _getAuth(DNSPacket *p, SOAData *soa, const string &inZone, int *zoneId, const string &querykey, const int best_match_len);
+
+        /* Only called for stuff like signing or AXFR transfers */
+        bool _getSOA(const string &rev_zone, SOAData &soa, DNSPacket *p);
+        virtual bool getSOA(const string &inZone, SOAData &soa, DNSPacket *p);
 };
 
 class BackendFactory
@@ -310,10 +456,10 @@ private:
 extern BackendMakerClass &BackendMakers();
 
 //! Exception that can be thrown by a DNSBackend to indicate a failure
-class DBException : public AhuException
+class DBException : public PDNSException
 {
 public:
-  DBException(const string &reason) : AhuException(reason){}
+  DBException(const string &reason) : PDNSException(reason){}
 };
 
 

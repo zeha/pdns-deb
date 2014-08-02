@@ -1,8 +1,5 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
-/* Define if building universal (internal helper macro) */
-#undef AC_APPLE_UNIVERSAL_BUILD
-
 /* Skip gcc locking */
 #undef GCC_SKIP_LOCKING
 
@@ -21,26 +18,17 @@
 /* Define to 1 if you have <boost/test/unit_test.hpp> */
 #undef HAVE_BOOST_TEST_UNIT_TEST_HPP
 
-/* If we have botan 1.10 */
+/* Define to 1 if you have botan 1.10 */
 #undef HAVE_BOTAN110
 
-/* If we have botan 1.8 */
+/* Define to 1 if you have botan 1.10 */
 #undef HAVE_BOTAN18
+
+/* Define to 1 if you have crypto++ */
+#undef HAVE_CRYPTOPP
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
-
-/* Define to 1 if you have the <fcntl.h> header file. */
-#undef HAVE_FCNTL_H
-
-/* Define to 1 if you have the `gethostname' function. */
-#undef HAVE_GETHOSTNAME
-
-/* Define to 1 if you have the <getopt.h> header file. */
-#undef HAVE_GETOPT_H
-
-/* Define to 1 if you have the `gettimeofday' function. */
-#undef HAVE_GETTIMEOFDAY
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
@@ -63,9 +51,6 @@
 /* Define to 1 if you have the `crypt' library (-lcrypt). */
 #undef HAVE_LIBCRYPT
 
-/* If we have libcurl */
-#undef HAVE_LIBCURL
-
 /* Define to 1 if you have the `dl' library (-ldl). */
 #undef HAVE_LIBDL
 
@@ -75,11 +60,20 @@
 /* Have -lldap_r */
 #undef HAVE_LIBLDAP_R
 
+/* Have -llmdb */
+#undef HAVE_LIBLMDB
+
 /* Have -lopendbx */
 #undef HAVE_LIBOPENDBX
 
-/* Define to 1 if you have the <limits.h> header file. */
-#undef HAVE_LIMITS_H
+/* Define to 1 if you have libzmq */
+#undef HAVE_LIBZMQ
+
+/* Define to 1 if you have the <lmdb.h> header file. */
+#undef HAVE_LMDB_H
+
+/* Define to 1 if you have the `localtime_r' function. */
+#undef HAVE_LOCALTIME_R
 
 /* liblua */
 #undef HAVE_LUA
@@ -90,20 +84,14 @@
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
 
-/* Define to 1 if you have the `mkdir' function. */
-#undef HAVE_MKDIR
-
-/* Define to 1 if you have the `mktime' function. */
-#undef HAVE_MKTIME
-
 /* Define to 1 if you have the <odbx.h> header file. */
 #undef HAVE_ODBX_H
 
-/* Define to 1 if you have the `select' function. */
-#undef HAVE_SELECT
+/* Define to 1 if you have p11-kit-1 */
+#undef HAVE_P11KIT1
 
-/* Define to 1 if you have the `socket' function. */
-#undef HAVE_SOCKET
+/* Define to 1 if you have 0.20 or newer P11-kit */
+#undef HAVE_P11KIT1_V2
 
 /* If we have sqlite3 */
 #undef HAVE_SQLITE3
@@ -117,26 +105,20 @@
 /* Define to 1 if you have the `strcasestr' function. */
 #undef HAVE_STRCASESTR
 
-/* Define to 1 if you have the `strerror' function. */
-#undef HAVE_STRERROR
-
 /* Define to 1 if you have the <strings.h> header file. */
 #undef HAVE_STRINGS_H
 
 /* Define to 1 if you have the <string.h> header file. */
 #undef HAVE_STRING_H
 
-/* Define to 1 if you have the <syslog.h> header file. */
-#undef HAVE_SYSLOG_H
-
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #undef HAVE_SYS_STAT_H
 
-/* Define to 1 if you have the <sys/time.h> header file. */
-#undef HAVE_SYS_TIME_H
-
 /* Define to 1 if you have the <sys/types.h> header file. */
 #undef HAVE_SYS_TYPES_H
+
+/* tm_gmtoff is available. */
+#undef HAVE_TM_GMTOFF
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
@@ -178,38 +160,23 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
-/* If we want HTTP connector */
-#undef REMOTEBACKEND_HTTP
+/* Built-in modules */
+#undef PDNS_MODULES
 
-/* Define as the return type of signal handlers (`int' or `void'). */
-#undef RETSIGTYPE
+/* Define to 1 if you have the ZeroMQ connector */
+#undef REMOTEBACKEND_ZEROMQ
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
 
-/* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
-#undef TIME_WITH_SYS_TIME
-
 /* Define to 1 if your <sys/time.h> declares `struct tm'. */
 #undef TM_IN_SYS_TIME
 
-/* If verbose logging should be enabled */
+/* Define to 1 if verbose logging is enabled */
 #undef VERBOSELOG
 
 /* Version number of package */
 #undef VERSION
-
-/* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
-   significant byte first (like Motorola and SPARC, unlike Intel). */
-#if defined AC_APPLE_UNIVERSAL_BUILD
-# if defined __BIG_ENDIAN__
-#  define WORDS_BIGENDIAN 1
-# endif
-#else
-# ifndef WORDS_BIGENDIAN
-#  undef WORDS_BIGENDIAN
-# endif
-#endif
 
 /* Define to 1 if `lex' declares `yytext' as a `char *' by default, not a
    `char[]'. */

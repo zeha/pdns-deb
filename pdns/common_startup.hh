@@ -1,11 +1,14 @@
 /*
     PowerDNS Versatile Database Driven Nameserver
-    Copyright (C) 2002  PowerDNS.COM BV
+    Copyright (C) 2002 - 2014 PowerDNS.COM BV
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -31,12 +34,10 @@
 #include "nameserver.hh"
 #include "statbag.hh"
 #include "tcpreceiver.hh"
-#include "webserver.hh"
-#include "ws.hh"
 
 extern ArgvMap theArg;
 extern StatBag S;  //!< Statistics are gathered across PDNS via the StatBag class S
-extern PacketCache PC; //!< This is the main PacketCache, shared accross all threads
+extern PacketCache PC; //!< This is the main PacketCache, shared across all threads
 extern DNSProxy *DP;
 extern DynListener *dl;
 extern CommunicatorClass Communicator;
@@ -48,8 +49,7 @@ extern void declareArguments();
 extern void declareStats();
 extern void mainthread();
 extern int isGuarded( char ** );
-
+void* carbonDumpThread(void*);
 extern bool g_anyToTcp;
-extern bool g_addSuperfluousNSEC3;
 
 #endif // COMMON_STARTUP_HH
