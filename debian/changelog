@@ -1,3 +1,9 @@
+pdns (3.4.0~rc1+20140829-1) experimental; urgency=medium
+
+  * Imported Upstream version 3.4.0~rc1+20140829
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Fri, 29 Aug 2014 21:26:13 +0200
+
 pdns (3.4.0~rc1-1) experimental; urgency=medium
 
   * New upstream release candidate, target experimental
