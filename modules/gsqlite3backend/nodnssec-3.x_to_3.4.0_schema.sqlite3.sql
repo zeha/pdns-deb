@@ -8,7 +8,7 @@ CREATE INDEX orderindex ON records(ordername);
 CREATE TABLE domainmetadata (
   id                    INTEGER PRIMARY KEY,
   domain_id             INT NOT NULL,
-  kind                  VARCHAR(32) COLLATE NOCASE,
+  kind                  VARCHAR(16) COLLATE NOCASE,
   content               TEXT
 );
 
