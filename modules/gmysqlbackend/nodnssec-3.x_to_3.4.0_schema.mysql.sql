@@ -15,7 +15,7 @@ CREATE INDEX recordorder ON records (domain_id, ordername);
 CREATE TABLE domainmetadata (
   id                    INT AUTO_INCREMENT,
   domain_id             INT NOT NULL,
-  kind                  VARCHAR(32),
+  kind                  VARCHAR(16),
   content               TEXT,
   PRIMARY KEY(id)
 ) Engine=InnoDB;

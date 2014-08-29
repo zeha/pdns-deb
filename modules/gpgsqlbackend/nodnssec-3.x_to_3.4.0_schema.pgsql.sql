@@ -15,7 +15,7 @@ CREATE INDEX recordorder ON records (domain_id, ordername text_pattern_ops);
 CREATE TABLE domainmetadata (
  id                     SERIAL PRIMARY KEY,
  domain_id              INT REFERENCES domains(id) ON DELETE CASCADE,
- kind                   VARCHAR(32),
+ kind                   VARCHAR(16),
  content                TEXT
 );
 

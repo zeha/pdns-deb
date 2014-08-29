@@ -280,6 +280,7 @@ int main(int argc, char **argv)
 try
 {
     reportAllTypes();
+    reportFancyTypes();
 #if __GNUC__ >= 3
     std::ios_base::sync_with_stdio(false);
 #endif

@@ -59,7 +59,7 @@ CREATE INDEX comments_order_idx ON comments (domain_id, modified_at);
 CREATE TABLE domainmetadata (
   id                    INT AUTO_INCREMENT,
   domain_id             INT NOT NULL,
-  kind                  VARCHAR(32),
+  kind                  VARCHAR(16),
   content               TEXT,
   PRIMARY KEY (id)
 ) Engine=InnoDB;
