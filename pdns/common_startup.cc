@@ -43,13 +43,11 @@ ArgvMap &arg()
 void declareArguments()
 {
   ::arg().set("local-port","The port on which we listen")="53";
-  ::arg().setSwitch("experimental-rfc2136","Enable/Disable RFC2136 (Dynamic DNS) support. Default is no.")="no";
-  ::arg().set("allow-2136-from","A global setting to allow RFC2136 from these IP ranges.")="0.0.0.0/0";
-  ::arg().setSwitch("forward-2136","A global setting to allow RFC2136 packages that are for a Slave domain, to be forwarded to the master.")="yes";
+  ::arg().setSwitch("experimental-dnsupdate","Enable/Disable DNS update (RFC2136) support. Default is no.")="no";
+  ::arg().set("allow-dnsupdate-from","A global setting to allow DNS updates from these IP ranges.")="127.0.0.0/8,::1";
+  ::arg().setSwitch("forward-dnsupdate","A global setting to allow DNS update packages that are for a Slave domain, to be forwarded to the master.")="yes";
   ::arg().setSwitch("log-dns-details","If PDNS should log DNS non-erroneous details")="no";
   ::arg().setSwitch("log-dns-queries","If PDNS should log all incoming DNS queries")="no";
-  ::arg().set("urlredirector","Where we send hosts to that need to be url redirected")="127.0.0.1";
-  ::arg().set("smtpredirector","Our smtpredir MX host")="a.misconfigured.powerdns.smtp.server";
   ::arg().set("local-address","Local IP addresses to which we bind")="0.0.0.0";
   ::arg().setSwitch("local-address-nonexist-fail","Fail to start if one or more of the local-address's do not exist on this server")="yes";
   ::arg().set("local-ipv6","Local IP address to which we bind")="";
@@ -59,8 +57,7 @@ void declareArguments()
   ::arg().set("query-local-address6","Source IPv6 address for sending queries")="::";
   ::arg().set("overload-queue-length","Maximum queuelength moving to packetcache only")="0";
   ::arg().set("max-queue-length","Maximum queuelength before considering situation lost")="5000";
-  ::arg().set("soa-serial-offset","Make sure that no SOA serial is less than this number")="0";
-  
+
   ::arg().set("retrieval-threads", "Number of AXFR-retrieval threads for slave operation")="2";
   ::arg().setSwitch("experimental-json-interface", "If the webserver should serve JSON data")="no";
   ::arg().setSwitch("experimental-api-readonly", "If the JSON API should disallow data modification")="no";
@@ -74,8 +71,6 @@ void declareArguments()
   
   ::arg().set("version-string","PowerDNS version in packets - full, anonymous, powerdns or custom")="full"; 
   ::arg().set("control-console","Debugging switch - don't use")="no"; // but I know you will!
-  ::arg().set("fancy-records","Process URL and MBOXFW records")="no";
-  ::arg().set("wildcard-url","Process URL and MBOXFW records")="no";
   ::arg().set("loglevel","Amount of logging. Higher is more. Do not set below 3")="4";
   ::arg().set("default-soa-name","name to insert in the SOA record if none set in the backend")="a.misconfigured.powerdns.server";
   ::arg().set("default-soa-mail","mail address to insert in the SOA record if none set in the backend")="";
@@ -193,10 +188,10 @@ void declareStats(void)
   S.declare("query-cache-hit","Number of hits on the query cache");
   S.declare("query-cache-miss","Number of misses on the query cache");
 
-  S.declare("rfc2136-queries", "RFC2136 packets received.");
-  S.declare("rfc2136-answers", "RFC2136 packets successfully answered.");
-  S.declare("rfc2136-refused", "RFC2136 packets that are refused.");
-  S.declare("rfc2136-changes", "RFC2136 changes to records in total.");
+  S.declare("dnsupdate-queries", "DNS update packets received.");
+  S.declare("dnsupdate-answers", "DNS update packets successfully answered.");
+  S.declare("dnsupdate-refused", "DNS update packets that are refused.");
+  S.declare("dnsupdate-changes", "DNS update changes to records in total.");
 
   S.declare("servfail-packets","Number of times a server-failed packet was sent out");
   S.declare("latency","Average number of microseconds needed to answer a question");

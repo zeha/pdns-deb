@@ -23,10 +23,14 @@ AC_DEFUN([PDNS_WITH_POSTGRESQL],[
   )
 
   AC_ARG_WITH([pgsql-config], 
-    AS_HELP_STRING([--with-pgsql-includes=<path>],
+    AS_HELP_STRING([--with-pgsql-config=<path>],
       [location of pg_config]
     ),
-    [PGSQL_pg_config="$withval"], 
+    [PGSQL_pg_config="$withval"
+     if test "x$PGSQL_pg_config" == "xyes" || test ! -x "$PGSQL_pg_config"; then 
+       AC_MSG_ERROR([--with-pgsql-config must provide a valid path to pg_config executable])
+     fi
+    ], 
     [AC_PATH_PROG([PGSQL_pg_config], [pg_config])]
   )
 

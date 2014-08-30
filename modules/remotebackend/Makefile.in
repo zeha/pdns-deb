@@ -94,6 +94,7 @@ EXTRA_PROGRAMS = test_remotebackend_pipe$(EXEEXT) \
 @PKCS11_TRUE@am__append_2 = $(P11KIT1_LIBS)
 subdir = modules/remotebackend
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
+	$(top_srcdir)/build-aux/depcomp \
 	$(top_srcdir)/build-aux/test-driver TODO
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/boost.m4 \
@@ -103,11 +104,16 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/boost.m4 \
 	$(top_srcdir)/m4/pdns_check_cdb.m4 \
 	$(top_srcdir)/m4/pdns_check_ldap.m4 \
 	$(top_srcdir)/m4/pdns_check_opendbx.m4 \
+	$(top_srcdir)/m4/pdns_check_ragel.m4 \
+	$(top_srcdir)/m4/pdns_d_fortify_source.m4 \
 	$(top_srcdir)/m4/pdns_enable_botan.m4 \
 	$(top_srcdir)/m4/pdns_enable_p11kit.m4 \
 	$(top_srcdir)/m4/pdns_enable_remotebackend_zeromq.m4 \
 	$(top_srcdir)/m4/pdns_enable_unit_tests.m4 \
 	$(top_srcdir)/m4/pdns_enable_verbose_logging.m4 \
+	$(top_srcdir)/m4/pdns_param_ssp_buffer_size.m4 \
+	$(top_srcdir)/m4/pdns_pie.m4 $(top_srcdir)/m4/pdns_relro.m4 \
+	$(top_srcdir)/m4/pdns_stack_protector.m4 \
 	$(top_srcdir)/m4/pdns_with_cryptopp.m4 \
 	$(top_srcdir)/m4/pdns_with_lmdb.m4 \
 	$(top_srcdir)/m4/pdns_with_lua.m4 \
@@ -115,7 +121,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/boost.m4 \
 	$(top_srcdir)/m4/pdns_with_oracle.m4 \
 	$(top_srcdir)/m4/pdns_with_postgresql.m4 \
 	$(top_srcdir)/m4/pdns_with_system_polarssl.m4 \
-	$(top_srcdir)/m4/tm-gmtoff.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/tm-gmtoff.m4 $(top_srcdir)/m4/warnings.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -327,8 +334,9 @@ am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
 am__v_at_0 = @
 am__v_at_1 = 
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
-depcomp =
-am__depfiles_maybe =
+depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
+am__depfiles_maybe = depfiles
+am__mv = mv -f
 CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
 LTCXXCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
@@ -611,6 +619,7 @@ BOTAN110_LIBS = @BOTAN110_LIBS@
 BOTAN18_CFLAGS = @BOTAN18_CFLAGS@
 BOTAN18_LIBS = @BOTAN18_LIBS@
 CC = @CC@
+CCDEPMODE = @CCDEPMODE@
 CDB_CFLAGS = @CDB_CFLAGS@
 CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
@@ -620,9 +629,11 @@ CRYPTOPP_CFLAGS = @CRYPTOPP_CFLAGS@
 CRYPTOPP_LIBS = @CRYPTOPP_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
+CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
+DEPDIR = @DEPDIR@
 DISTCHECK_CONFIGURE_FLAGS = @DISTCHECK_CONFIGURE_FLAGS@
 DLLTOOL = @DLLTOOL@
 DSYMUTIL = @DSYMUTIL@
@@ -686,6 +697,8 @@ PATH_SEPARATOR = @PATH_SEPARATOR@
 PGSQL_inc = @PGSQL_inc@
 PGSQL_lib = @PGSQL_lib@
 PGSQL_pg_config = @PGSQL_pg_config@
+PIE_CFLAGS = @PIE_CFLAGS@
+PIE_LDFLAGS = @PIE_LDFLAGS@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -694,6 +707,7 @@ POLARSSL_LIBS = @POLARSSL_LIBS@
 POLARSSL_SUBDIR = @POLARSSL_SUBDIR@
 RAGEL = @RAGEL@
 RANLIB = @RANLIB@
+RELRO_LDFLAGS = @RELRO_LDFLAGS@
 REMOTEBACKEND_ZEROMQ = @REMOTEBACKEND_ZEROMQ@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
@@ -713,7 +727,9 @@ ac_ct_AR = @ac_ct_AR@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_CXX = @ac_ct_CXX@
 ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
+am__include = @am__include@
 am__leading_dot = @am__leading_dot@
+am__quote = @am__quote@
 am__tar = @am__tar@
 am__untar = @am__untar@
 bindir = @bindir@
@@ -833,9 +849,9 @@ $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign --ignore-deps modules/remotebackend/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign modules/remotebackend/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --foreign --ignore-deps modules/remotebackend/Makefile
+	  $(AUTOMAKE) --foreign modules/remotebackend/Makefile
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
@@ -895,57 +911,86 @@ libremotebackend.la: $(libremotebackend_la_OBJECTS) $(libremotebackend_la_DEPEND
 ../../pdns/$(am__dirstamp):
 	@$(MKDIR_P) ../../pdns
 	@: > ../../pdns/$(am__dirstamp)
+../../pdns/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../../pdns/$(DEPDIR)
+	@: > ../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-dnsbackend.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-ueberbackend.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-nameserver.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-misc.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-unix_utility.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-logger.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-statbag.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-arguments.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-qtype.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-dnspacket.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-dnswriter.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-base64.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-base32.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-dnsrecords.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-dnslabeltext.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-dnsparser.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-rcpgenerator.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-ednssubnet.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-nsecrecords.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-sillyrecords.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-dnssecinfra.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-dns_random.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-packetcache.lo:  \
-	../../pdns/$(am__dirstamp)
-../../pdns/libtestremotebackend_la-dns.lo: ../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
+../../pdns/libtestremotebackend_la-dns.lo: ../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-json.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-pkcs11signers.lo:  \
-	../../pdns/$(am__dirstamp)
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 
 libtestremotebackend.la: $(libtestremotebackend_la_OBJECTS) $(libtestremotebackend_la_DEPENDENCIES) $(EXTRA_libtestremotebackend_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(libtestremotebackend_la_LINK)  $(libtestremotebackend_la_OBJECTS) $(libtestremotebackend_la_LIBADD) $(LIBS)
@@ -982,179 +1027,463 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-arguments.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-base32.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-base64.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dns_random.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsbackend.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dnslabeltext.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dnspacket.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsparser.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsrecords.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dnssecinfra.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-logger.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-misc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-nameserver.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-nsecrecords.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-packetcache.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-pkcs11signers.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-qtype.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-sillyrecords.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-statbag.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/httpconnector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libtestremotebackend_la-httpconnector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libtestremotebackend_la-pipeconnector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libtestremotebackend_la-remotebackend.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libtestremotebackend_la-unixconnector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libtestremotebackend_la-zmqconnector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipeconnector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/remotebackend.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_http-test-remotebackend-http.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_http-test-remotebackend.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_json-test-remotebackend-json.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_json-test-remotebackend.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_pipe-test-remotebackend-pipe.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_pipe-test-remotebackend.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_post-test-remotebackend-post.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_post-test-remotebackend.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_unix-test-remotebackend-unix.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_unix-test-remotebackend.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_zeromq-test-remotebackend-zeromq.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_remotebackend_zeromq-test-remotebackend.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unixconnector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/zmqconnector.Plo@am__quote@
+
 .cc.o:
-	$(AM_V_CXX)$(CXXCOMPILE) -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
 
 .cc.obj:
-	$(AM_V_CXX)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .cc.lo:
-	$(AM_V_CXX)$(LTCXXCOMPILE) -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
 
 ../../pdns/libtestremotebackend_la-dnsbackend.lo: ../../pdns/dnsbackend.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnsbackend.lo `test -f '../../pdns/dnsbackend.cc' || echo '$(srcdir)/'`../../pdns/dnsbackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dnsbackend.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsbackend.Tpo -c -o ../../pdns/libtestremotebackend_la-dnsbackend.lo `test -f '../../pdns/dnsbackend.cc' || echo '$(srcdir)/'`../../pdns/dnsbackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsbackend.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsbackend.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dnsbackend.cc' object='../../pdns/libtestremotebackend_la-dnsbackend.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnsbackend.lo `test -f '../../pdns/dnsbackend.cc' || echo '$(srcdir)/'`../../pdns/dnsbackend.cc
 
 ../../pdns/libtestremotebackend_la-ueberbackend.lo: ../../pdns/ueberbackend.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-ueberbackend.lo `test -f '../../pdns/ueberbackend.cc' || echo '$(srcdir)/'`../../pdns/ueberbackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-ueberbackend.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Tpo -c -o ../../pdns/libtestremotebackend_la-ueberbackend.lo `test -f '../../pdns/ueberbackend.cc' || echo '$(srcdir)/'`../../pdns/ueberbackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/ueberbackend.cc' object='../../pdns/libtestremotebackend_la-ueberbackend.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-ueberbackend.lo `test -f '../../pdns/ueberbackend.cc' || echo '$(srcdir)/'`../../pdns/ueberbackend.cc
 
 ../../pdns/libtestremotebackend_la-nameserver.lo: ../../pdns/nameserver.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-nameserver.lo `test -f '../../pdns/nameserver.cc' || echo '$(srcdir)/'`../../pdns/nameserver.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-nameserver.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-nameserver.Tpo -c -o ../../pdns/libtestremotebackend_la-nameserver.lo `test -f '../../pdns/nameserver.cc' || echo '$(srcdir)/'`../../pdns/nameserver.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-nameserver.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-nameserver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/nameserver.cc' object='../../pdns/libtestremotebackend_la-nameserver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-nameserver.lo `test -f '../../pdns/nameserver.cc' || echo '$(srcdir)/'`../../pdns/nameserver.cc
 
 ../../pdns/libtestremotebackend_la-misc.lo: ../../pdns/misc.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-misc.lo `test -f '../../pdns/misc.cc' || echo '$(srcdir)/'`../../pdns/misc.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-misc.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-misc.Tpo -c -o ../../pdns/libtestremotebackend_la-misc.lo `test -f '../../pdns/misc.cc' || echo '$(srcdir)/'`../../pdns/misc.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-misc.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-misc.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/misc.cc' object='../../pdns/libtestremotebackend_la-misc.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-misc.lo `test -f '../../pdns/misc.cc' || echo '$(srcdir)/'`../../pdns/misc.cc
 
 ../../pdns/libtestremotebackend_la-unix_utility.lo: ../../pdns/unix_utility.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-unix_utility.lo `test -f '../../pdns/unix_utility.cc' || echo '$(srcdir)/'`../../pdns/unix_utility.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-unix_utility.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Tpo -c -o ../../pdns/libtestremotebackend_la-unix_utility.lo `test -f '../../pdns/unix_utility.cc' || echo '$(srcdir)/'`../../pdns/unix_utility.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/unix_utility.cc' object='../../pdns/libtestremotebackend_la-unix_utility.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-unix_utility.lo `test -f '../../pdns/unix_utility.cc' || echo '$(srcdir)/'`../../pdns/unix_utility.cc
 
 ../../pdns/libtestremotebackend_la-logger.lo: ../../pdns/logger.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-logger.lo `test -f '../../pdns/logger.cc' || echo '$(srcdir)/'`../../pdns/logger.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-logger.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-logger.Tpo -c -o ../../pdns/libtestremotebackend_la-logger.lo `test -f '../../pdns/logger.cc' || echo '$(srcdir)/'`../../pdns/logger.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-logger.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-logger.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/logger.cc' object='../../pdns/libtestremotebackend_la-logger.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-logger.lo `test -f '../../pdns/logger.cc' || echo '$(srcdir)/'`../../pdns/logger.cc
 
 ../../pdns/libtestremotebackend_la-statbag.lo: ../../pdns/statbag.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-statbag.lo `test -f '../../pdns/statbag.cc' || echo '$(srcdir)/'`../../pdns/statbag.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-statbag.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-statbag.Tpo -c -o ../../pdns/libtestremotebackend_la-statbag.lo `test -f '../../pdns/statbag.cc' || echo '$(srcdir)/'`../../pdns/statbag.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-statbag.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-statbag.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/statbag.cc' object='../../pdns/libtestremotebackend_la-statbag.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-statbag.lo `test -f '../../pdns/statbag.cc' || echo '$(srcdir)/'`../../pdns/statbag.cc
 
 ../../pdns/libtestremotebackend_la-arguments.lo: ../../pdns/arguments.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-arguments.lo `test -f '../../pdns/arguments.cc' || echo '$(srcdir)/'`../../pdns/arguments.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-arguments.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-arguments.Tpo -c -o ../../pdns/libtestremotebackend_la-arguments.lo `test -f '../../pdns/arguments.cc' || echo '$(srcdir)/'`../../pdns/arguments.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-arguments.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-arguments.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/arguments.cc' object='../../pdns/libtestremotebackend_la-arguments.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-arguments.lo `test -f '../../pdns/arguments.cc' || echo '$(srcdir)/'`../../pdns/arguments.cc
 
 ../../pdns/libtestremotebackend_la-qtype.lo: ../../pdns/qtype.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-qtype.lo `test -f '../../pdns/qtype.cc' || echo '$(srcdir)/'`../../pdns/qtype.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-qtype.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-qtype.Tpo -c -o ../../pdns/libtestremotebackend_la-qtype.lo `test -f '../../pdns/qtype.cc' || echo '$(srcdir)/'`../../pdns/qtype.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-qtype.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-qtype.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/qtype.cc' object='../../pdns/libtestremotebackend_la-qtype.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-qtype.lo `test -f '../../pdns/qtype.cc' || echo '$(srcdir)/'`../../pdns/qtype.cc
 
 ../../pdns/libtestremotebackend_la-dnspacket.lo: ../../pdns/dnspacket.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnspacket.lo `test -f '../../pdns/dnspacket.cc' || echo '$(srcdir)/'`../../pdns/dnspacket.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dnspacket.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnspacket.Tpo -c -o ../../pdns/libtestremotebackend_la-dnspacket.lo `test -f '../../pdns/dnspacket.cc' || echo '$(srcdir)/'`../../pdns/dnspacket.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnspacket.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnspacket.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dnspacket.cc' object='../../pdns/libtestremotebackend_la-dnspacket.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnspacket.lo `test -f '../../pdns/dnspacket.cc' || echo '$(srcdir)/'`../../pdns/dnspacket.cc
 
 ../../pdns/libtestremotebackend_la-dnswriter.lo: ../../pdns/dnswriter.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnswriter.lo `test -f '../../pdns/dnswriter.cc' || echo '$(srcdir)/'`../../pdns/dnswriter.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dnswriter.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Tpo -c -o ../../pdns/libtestremotebackend_la-dnswriter.lo `test -f '../../pdns/dnswriter.cc' || echo '$(srcdir)/'`../../pdns/dnswriter.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dnswriter.cc' object='../../pdns/libtestremotebackend_la-dnswriter.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnswriter.lo `test -f '../../pdns/dnswriter.cc' || echo '$(srcdir)/'`../../pdns/dnswriter.cc
 
 ../../pdns/libtestremotebackend_la-base64.lo: ../../pdns/base64.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-base64.lo `test -f '../../pdns/base64.cc' || echo '$(srcdir)/'`../../pdns/base64.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-base64.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-base64.Tpo -c -o ../../pdns/libtestremotebackend_la-base64.lo `test -f '../../pdns/base64.cc' || echo '$(srcdir)/'`../../pdns/base64.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-base64.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-base64.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/base64.cc' object='../../pdns/libtestremotebackend_la-base64.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-base64.lo `test -f '../../pdns/base64.cc' || echo '$(srcdir)/'`../../pdns/base64.cc
 
 ../../pdns/libtestremotebackend_la-base32.lo: ../../pdns/base32.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-base32.lo `test -f '../../pdns/base32.cc' || echo '$(srcdir)/'`../../pdns/base32.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-base32.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-base32.Tpo -c -o ../../pdns/libtestremotebackend_la-base32.lo `test -f '../../pdns/base32.cc' || echo '$(srcdir)/'`../../pdns/base32.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-base32.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-base32.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/base32.cc' object='../../pdns/libtestremotebackend_la-base32.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-base32.lo `test -f '../../pdns/base32.cc' || echo '$(srcdir)/'`../../pdns/base32.cc
 
 ../../pdns/libtestremotebackend_la-dnsrecords.lo: ../../pdns/dnsrecords.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnsrecords.lo `test -f '../../pdns/dnsrecords.cc' || echo '$(srcdir)/'`../../pdns/dnsrecords.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dnsrecords.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsrecords.Tpo -c -o ../../pdns/libtestremotebackend_la-dnsrecords.lo `test -f '../../pdns/dnsrecords.cc' || echo '$(srcdir)/'`../../pdns/dnsrecords.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsrecords.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsrecords.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dnsrecords.cc' object='../../pdns/libtestremotebackend_la-dnsrecords.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnsrecords.lo `test -f '../../pdns/dnsrecords.cc' || echo '$(srcdir)/'`../../pdns/dnsrecords.cc
 
 ../../pdns/libtestremotebackend_la-dnslabeltext.lo: ../../pdns/dnslabeltext.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnslabeltext.lo `test -f '../../pdns/dnslabeltext.cc' || echo '$(srcdir)/'`../../pdns/dnslabeltext.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dnslabeltext.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnslabeltext.Tpo -c -o ../../pdns/libtestremotebackend_la-dnslabeltext.lo `test -f '../../pdns/dnslabeltext.cc' || echo '$(srcdir)/'`../../pdns/dnslabeltext.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnslabeltext.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnslabeltext.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dnslabeltext.cc' object='../../pdns/libtestremotebackend_la-dnslabeltext.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnslabeltext.lo `test -f '../../pdns/dnslabeltext.cc' || echo '$(srcdir)/'`../../pdns/dnslabeltext.cc
 
 ../../pdns/libtestremotebackend_la-dnsparser.lo: ../../pdns/dnsparser.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnsparser.lo `test -f '../../pdns/dnsparser.cc' || echo '$(srcdir)/'`../../pdns/dnsparser.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dnsparser.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsparser.Tpo -c -o ../../pdns/libtestremotebackend_la-dnsparser.lo `test -f '../../pdns/dnsparser.cc' || echo '$(srcdir)/'`../../pdns/dnsparser.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsparser.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsparser.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dnsparser.cc' object='../../pdns/libtestremotebackend_la-dnsparser.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnsparser.lo `test -f '../../pdns/dnsparser.cc' || echo '$(srcdir)/'`../../pdns/dnsparser.cc
 
 ../../pdns/libtestremotebackend_la-rcpgenerator.lo: ../../pdns/rcpgenerator.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-rcpgenerator.lo `test -f '../../pdns/rcpgenerator.cc' || echo '$(srcdir)/'`../../pdns/rcpgenerator.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-rcpgenerator.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Tpo -c -o ../../pdns/libtestremotebackend_la-rcpgenerator.lo `test -f '../../pdns/rcpgenerator.cc' || echo '$(srcdir)/'`../../pdns/rcpgenerator.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/rcpgenerator.cc' object='../../pdns/libtestremotebackend_la-rcpgenerator.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-rcpgenerator.lo `test -f '../../pdns/rcpgenerator.cc' || echo '$(srcdir)/'`../../pdns/rcpgenerator.cc
 
 ../../pdns/libtestremotebackend_la-ednssubnet.lo: ../../pdns/ednssubnet.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-ednssubnet.lo `test -f '../../pdns/ednssubnet.cc' || echo '$(srcdir)/'`../../pdns/ednssubnet.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-ednssubnet.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Tpo -c -o ../../pdns/libtestremotebackend_la-ednssubnet.lo `test -f '../../pdns/ednssubnet.cc' || echo '$(srcdir)/'`../../pdns/ednssubnet.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/ednssubnet.cc' object='../../pdns/libtestremotebackend_la-ednssubnet.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-ednssubnet.lo `test -f '../../pdns/ednssubnet.cc' || echo '$(srcdir)/'`../../pdns/ednssubnet.cc
 
 ../../pdns/libtestremotebackend_la-nsecrecords.lo: ../../pdns/nsecrecords.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-nsecrecords.lo `test -f '../../pdns/nsecrecords.cc' || echo '$(srcdir)/'`../../pdns/nsecrecords.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-nsecrecords.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-nsecrecords.Tpo -c -o ../../pdns/libtestremotebackend_la-nsecrecords.lo `test -f '../../pdns/nsecrecords.cc' || echo '$(srcdir)/'`../../pdns/nsecrecords.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-nsecrecords.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-nsecrecords.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/nsecrecords.cc' object='../../pdns/libtestremotebackend_la-nsecrecords.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-nsecrecords.lo `test -f '../../pdns/nsecrecords.cc' || echo '$(srcdir)/'`../../pdns/nsecrecords.cc
 
 ../../pdns/libtestremotebackend_la-sillyrecords.lo: ../../pdns/sillyrecords.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-sillyrecords.lo `test -f '../../pdns/sillyrecords.cc' || echo '$(srcdir)/'`../../pdns/sillyrecords.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-sillyrecords.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-sillyrecords.Tpo -c -o ../../pdns/libtestremotebackend_la-sillyrecords.lo `test -f '../../pdns/sillyrecords.cc' || echo '$(srcdir)/'`../../pdns/sillyrecords.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-sillyrecords.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-sillyrecords.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/sillyrecords.cc' object='../../pdns/libtestremotebackend_la-sillyrecords.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-sillyrecords.lo `test -f '../../pdns/sillyrecords.cc' || echo '$(srcdir)/'`../../pdns/sillyrecords.cc
 
 ../../pdns/libtestremotebackend_la-dnssecinfra.lo: ../../pdns/dnssecinfra.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnssecinfra.lo `test -f '../../pdns/dnssecinfra.cc' || echo '$(srcdir)/'`../../pdns/dnssecinfra.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dnssecinfra.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnssecinfra.Tpo -c -o ../../pdns/libtestremotebackend_la-dnssecinfra.lo `test -f '../../pdns/dnssecinfra.cc' || echo '$(srcdir)/'`../../pdns/dnssecinfra.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnssecinfra.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnssecinfra.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dnssecinfra.cc' object='../../pdns/libtestremotebackend_la-dnssecinfra.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnssecinfra.lo `test -f '../../pdns/dnssecinfra.cc' || echo '$(srcdir)/'`../../pdns/dnssecinfra.cc
 
 ../../pdns/libtestremotebackend_la-dns_random.lo: ../../pdns/dns_random.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dns_random.lo `test -f '../../pdns/dns_random.cc' || echo '$(srcdir)/'`../../pdns/dns_random.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dns_random.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns_random.Tpo -c -o ../../pdns/libtestremotebackend_la-dns_random.lo `test -f '../../pdns/dns_random.cc' || echo '$(srcdir)/'`../../pdns/dns_random.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns_random.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns_random.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dns_random.cc' object='../../pdns/libtestremotebackend_la-dns_random.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dns_random.lo `test -f '../../pdns/dns_random.cc' || echo '$(srcdir)/'`../../pdns/dns_random.cc
 
 ../../pdns/libtestremotebackend_la-packetcache.lo: ../../pdns/packetcache.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-packetcache.lo `test -f '../../pdns/packetcache.cc' || echo '$(srcdir)/'`../../pdns/packetcache.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-packetcache.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-packetcache.Tpo -c -o ../../pdns/libtestremotebackend_la-packetcache.lo `test -f '../../pdns/packetcache.cc' || echo '$(srcdir)/'`../../pdns/packetcache.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-packetcache.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-packetcache.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/packetcache.cc' object='../../pdns/libtestremotebackend_la-packetcache.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-packetcache.lo `test -f '../../pdns/packetcache.cc' || echo '$(srcdir)/'`../../pdns/packetcache.cc
 
 ../../pdns/libtestremotebackend_la-dns.lo: ../../pdns/dns.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dns.lo `test -f '../../pdns/dns.cc' || echo '$(srcdir)/'`../../pdns/dns.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dns.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Tpo -c -o ../../pdns/libtestremotebackend_la-dns.lo `test -f '../../pdns/dns.cc' || echo '$(srcdir)/'`../../pdns/dns.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dns.cc' object='../../pdns/libtestremotebackend_la-dns.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dns.lo `test -f '../../pdns/dns.cc' || echo '$(srcdir)/'`../../pdns/dns.cc
 
 ../../pdns/libtestremotebackend_la-json.lo: ../../pdns/json.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-json.lo `test -f '../../pdns/json.cc' || echo '$(srcdir)/'`../../pdns/json.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-json.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Tpo -c -o ../../pdns/libtestremotebackend_la-json.lo `test -f '../../pdns/json.cc' || echo '$(srcdir)/'`../../pdns/json.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/json.cc' object='../../pdns/libtestremotebackend_la-json.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-json.lo `test -f '../../pdns/json.cc' || echo '$(srcdir)/'`../../pdns/json.cc
 
 libtestremotebackend_la-remotebackend.lo: remotebackend.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-remotebackend.lo `test -f 'remotebackend.cc' || echo '$(srcdir)/'`remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT libtestremotebackend_la-remotebackend.lo -MD -MP -MF $(DEPDIR)/libtestremotebackend_la-remotebackend.Tpo -c -o libtestremotebackend_la-remotebackend.lo `test -f 'remotebackend.cc' || echo '$(srcdir)/'`remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libtestremotebackend_la-remotebackend.Tpo $(DEPDIR)/libtestremotebackend_la-remotebackend.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='remotebackend.cc' object='libtestremotebackend_la-remotebackend.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-remotebackend.lo `test -f 'remotebackend.cc' || echo '$(srcdir)/'`remotebackend.cc
 
 libtestremotebackend_la-unixconnector.lo: unixconnector.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-unixconnector.lo `test -f 'unixconnector.cc' || echo '$(srcdir)/'`unixconnector.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT libtestremotebackend_la-unixconnector.lo -MD -MP -MF $(DEPDIR)/libtestremotebackend_la-unixconnector.Tpo -c -o libtestremotebackend_la-unixconnector.lo `test -f 'unixconnector.cc' || echo '$(srcdir)/'`unixconnector.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libtestremotebackend_la-unixconnector.Tpo $(DEPDIR)/libtestremotebackend_la-unixconnector.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='unixconnector.cc' object='libtestremotebackend_la-unixconnector.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-unixconnector.lo `test -f 'unixconnector.cc' || echo '$(srcdir)/'`unixconnector.cc
 
 libtestremotebackend_la-httpconnector.lo: httpconnector.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-httpconnector.lo `test -f 'httpconnector.cc' || echo '$(srcdir)/'`httpconnector.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT libtestremotebackend_la-httpconnector.lo -MD -MP -MF $(DEPDIR)/libtestremotebackend_la-httpconnector.Tpo -c -o libtestremotebackend_la-httpconnector.lo `test -f 'httpconnector.cc' || echo '$(srcdir)/'`httpconnector.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libtestremotebackend_la-httpconnector.Tpo $(DEPDIR)/libtestremotebackend_la-httpconnector.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='httpconnector.cc' object='libtestremotebackend_la-httpconnector.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-httpconnector.lo `test -f 'httpconnector.cc' || echo '$(srcdir)/'`httpconnector.cc
 
 libtestremotebackend_la-pipeconnector.lo: pipeconnector.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-pipeconnector.lo `test -f 'pipeconnector.cc' || echo '$(srcdir)/'`pipeconnector.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT libtestremotebackend_la-pipeconnector.lo -MD -MP -MF $(DEPDIR)/libtestremotebackend_la-pipeconnector.Tpo -c -o libtestremotebackend_la-pipeconnector.lo `test -f 'pipeconnector.cc' || echo '$(srcdir)/'`pipeconnector.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libtestremotebackend_la-pipeconnector.Tpo $(DEPDIR)/libtestremotebackend_la-pipeconnector.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='pipeconnector.cc' object='libtestremotebackend_la-pipeconnector.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-pipeconnector.lo `test -f 'pipeconnector.cc' || echo '$(srcdir)/'`pipeconnector.cc
 
 libtestremotebackend_la-zmqconnector.lo: zmqconnector.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-zmqconnector.lo `test -f 'zmqconnector.cc' || echo '$(srcdir)/'`zmqconnector.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT libtestremotebackend_la-zmqconnector.lo -MD -MP -MF $(DEPDIR)/libtestremotebackend_la-zmqconnector.Tpo -c -o libtestremotebackend_la-zmqconnector.lo `test -f 'zmqconnector.cc' || echo '$(srcdir)/'`zmqconnector.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libtestremotebackend_la-zmqconnector.Tpo $(DEPDIR)/libtestremotebackend_la-zmqconnector.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='zmqconnector.cc' object='libtestremotebackend_la-zmqconnector.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-zmqconnector.lo `test -f 'zmqconnector.cc' || echo '$(srcdir)/'`zmqconnector.cc
 
 ../../pdns/libtestremotebackend_la-pkcs11signers.lo: ../../pdns/pkcs11signers.cc
-	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-pkcs11signers.lo `test -f '../../pdns/pkcs11signers.cc' || echo '$(srcdir)/'`../../pdns/pkcs11signers.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-pkcs11signers.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-pkcs11signers.Tpo -c -o ../../pdns/libtestremotebackend_la-pkcs11signers.lo `test -f '../../pdns/pkcs11signers.cc' || echo '$(srcdir)/'`../../pdns/pkcs11signers.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-pkcs11signers.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-pkcs11signers.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/pkcs11signers.cc' object='../../pdns/libtestremotebackend_la-pkcs11signers.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtestremotebackend_la_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-pkcs11signers.lo `test -f '../../pdns/pkcs11signers.cc' || echo '$(srcdir)/'`../../pdns/pkcs11signers.cc
 
 test_remotebackend_http-test-remotebackend.o: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_http-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_http-test-remotebackend.o -MD -MP -MF $(DEPDIR)/test_remotebackend_http-test-remotebackend.Tpo -c -o test_remotebackend_http-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_http-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_http-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_http-test-remotebackend.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_http-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
 
 test_remotebackend_http-test-remotebackend.obj: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_http-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_http-test-remotebackend.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_http-test-remotebackend.Tpo -c -o test_remotebackend_http-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_http-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_http-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_http-test-remotebackend.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_http-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
 
 test_remotebackend_http-test-remotebackend-http.o: test-remotebackend-http.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_http-test-remotebackend-http.o `test -f 'test-remotebackend-http.cc' || echo '$(srcdir)/'`test-remotebackend-http.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_http-test-remotebackend-http.o -MD -MP -MF $(DEPDIR)/test_remotebackend_http-test-remotebackend-http.Tpo -c -o test_remotebackend_http-test-remotebackend-http.o `test -f 'test-remotebackend-http.cc' || echo '$(srcdir)/'`test-remotebackend-http.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_http-test-remotebackend-http.Tpo $(DEPDIR)/test_remotebackend_http-test-remotebackend-http.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-http.cc' object='test_remotebackend_http-test-remotebackend-http.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_http-test-remotebackend-http.o `test -f 'test-remotebackend-http.cc' || echo '$(srcdir)/'`test-remotebackend-http.cc
 
 test_remotebackend_http-test-remotebackend-http.obj: test-remotebackend-http.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_http-test-remotebackend-http.obj `if test -f 'test-remotebackend-http.cc'; then $(CYGPATH_W) 'test-remotebackend-http.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-http.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_http-test-remotebackend-http.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_http-test-remotebackend-http.Tpo -c -o test_remotebackend_http-test-remotebackend-http.obj `if test -f 'test-remotebackend-http.cc'; then $(CYGPATH_W) 'test-remotebackend-http.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-http.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_http-test-remotebackend-http.Tpo $(DEPDIR)/test_remotebackend_http-test-remotebackend-http.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-http.cc' object='test_remotebackend_http-test-remotebackend-http.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_http_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_http-test-remotebackend-http.obj `if test -f 'test-remotebackend-http.cc'; then $(CYGPATH_W) 'test-remotebackend-http.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-http.cc'; fi`
 
 test_remotebackend_json-test-remotebackend.o: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_json-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_json-test-remotebackend.o -MD -MP -MF $(DEPDIR)/test_remotebackend_json-test-remotebackend.Tpo -c -o test_remotebackend_json-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_json-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_json-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_json-test-remotebackend.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_json-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
 
 test_remotebackend_json-test-remotebackend.obj: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_json-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_json-test-remotebackend.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_json-test-remotebackend.Tpo -c -o test_remotebackend_json-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_json-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_json-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_json-test-remotebackend.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_json-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
 
 test_remotebackend_json-test-remotebackend-json.o: test-remotebackend-json.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_json-test-remotebackend-json.o `test -f 'test-remotebackend-json.cc' || echo '$(srcdir)/'`test-remotebackend-json.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_json-test-remotebackend-json.o -MD -MP -MF $(DEPDIR)/test_remotebackend_json-test-remotebackend-json.Tpo -c -o test_remotebackend_json-test-remotebackend-json.o `test -f 'test-remotebackend-json.cc' || echo '$(srcdir)/'`test-remotebackend-json.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_json-test-remotebackend-json.Tpo $(DEPDIR)/test_remotebackend_json-test-remotebackend-json.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-json.cc' object='test_remotebackend_json-test-remotebackend-json.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_json-test-remotebackend-json.o `test -f 'test-remotebackend-json.cc' || echo '$(srcdir)/'`test-remotebackend-json.cc
 
 test_remotebackend_json-test-remotebackend-json.obj: test-remotebackend-json.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_json-test-remotebackend-json.obj `if test -f 'test-remotebackend-json.cc'; then $(CYGPATH_W) 'test-remotebackend-json.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-json.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_json-test-remotebackend-json.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_json-test-remotebackend-json.Tpo -c -o test_remotebackend_json-test-remotebackend-json.obj `if test -f 'test-remotebackend-json.cc'; then $(CYGPATH_W) 'test-remotebackend-json.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-json.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_json-test-remotebackend-json.Tpo $(DEPDIR)/test_remotebackend_json-test-remotebackend-json.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-json.cc' object='test_remotebackend_json-test-remotebackend-json.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_json_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_json-test-remotebackend-json.obj `if test -f 'test-remotebackend-json.cc'; then $(CYGPATH_W) 'test-remotebackend-json.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-json.cc'; fi`
 
 test_remotebackend_pipe-test-remotebackend.o: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_pipe-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_pipe-test-remotebackend.o -MD -MP -MF $(DEPDIR)/test_remotebackend_pipe-test-remotebackend.Tpo -c -o test_remotebackend_pipe-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_pipe-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_pipe-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_pipe-test-remotebackend.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_pipe-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
 
 test_remotebackend_pipe-test-remotebackend.obj: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_pipe-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_pipe-test-remotebackend.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_pipe-test-remotebackend.Tpo -c -o test_remotebackend_pipe-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_pipe-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_pipe-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_pipe-test-remotebackend.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_pipe-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
 
 test_remotebackend_pipe-test-remotebackend-pipe.o: test-remotebackend-pipe.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_pipe-test-remotebackend-pipe.o `test -f 'test-remotebackend-pipe.cc' || echo '$(srcdir)/'`test-remotebackend-pipe.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_pipe-test-remotebackend-pipe.o -MD -MP -MF $(DEPDIR)/test_remotebackend_pipe-test-remotebackend-pipe.Tpo -c -o test_remotebackend_pipe-test-remotebackend-pipe.o `test -f 'test-remotebackend-pipe.cc' || echo '$(srcdir)/'`test-remotebackend-pipe.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_pipe-test-remotebackend-pipe.Tpo $(DEPDIR)/test_remotebackend_pipe-test-remotebackend-pipe.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-pipe.cc' object='test_remotebackend_pipe-test-remotebackend-pipe.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_pipe-test-remotebackend-pipe.o `test -f 'test-remotebackend-pipe.cc' || echo '$(srcdir)/'`test-remotebackend-pipe.cc
 
 test_remotebackend_pipe-test-remotebackend-pipe.obj: test-remotebackend-pipe.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_pipe-test-remotebackend-pipe.obj `if test -f 'test-remotebackend-pipe.cc'; then $(CYGPATH_W) 'test-remotebackend-pipe.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-pipe.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_pipe-test-remotebackend-pipe.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_pipe-test-remotebackend-pipe.Tpo -c -o test_remotebackend_pipe-test-remotebackend-pipe.obj `if test -f 'test-remotebackend-pipe.cc'; then $(CYGPATH_W) 'test-remotebackend-pipe.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-pipe.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_pipe-test-remotebackend-pipe.Tpo $(DEPDIR)/test_remotebackend_pipe-test-remotebackend-pipe.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-pipe.cc' object='test_remotebackend_pipe-test-remotebackend-pipe.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_pipe_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_pipe-test-remotebackend-pipe.obj `if test -f 'test-remotebackend-pipe.cc'; then $(CYGPATH_W) 'test-remotebackend-pipe.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-pipe.cc'; fi`
 
 test_remotebackend_post-test-remotebackend.o: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_post-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_post-test-remotebackend.o -MD -MP -MF $(DEPDIR)/test_remotebackend_post-test-remotebackend.Tpo -c -o test_remotebackend_post-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_post-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_post-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_post-test-remotebackend.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_post-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
 
 test_remotebackend_post-test-remotebackend.obj: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_post-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_post-test-remotebackend.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_post-test-remotebackend.Tpo -c -o test_remotebackend_post-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_post-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_post-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_post-test-remotebackend.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_post-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
 
 test_remotebackend_post-test-remotebackend-post.o: test-remotebackend-post.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_post-test-remotebackend-post.o `test -f 'test-remotebackend-post.cc' || echo '$(srcdir)/'`test-remotebackend-post.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_post-test-remotebackend-post.o -MD -MP -MF $(DEPDIR)/test_remotebackend_post-test-remotebackend-post.Tpo -c -o test_remotebackend_post-test-remotebackend-post.o `test -f 'test-remotebackend-post.cc' || echo '$(srcdir)/'`test-remotebackend-post.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_post-test-remotebackend-post.Tpo $(DEPDIR)/test_remotebackend_post-test-remotebackend-post.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-post.cc' object='test_remotebackend_post-test-remotebackend-post.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_post-test-remotebackend-post.o `test -f 'test-remotebackend-post.cc' || echo '$(srcdir)/'`test-remotebackend-post.cc
 
 test_remotebackend_post-test-remotebackend-post.obj: test-remotebackend-post.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_post-test-remotebackend-post.obj `if test -f 'test-remotebackend-post.cc'; then $(CYGPATH_W) 'test-remotebackend-post.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-post.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_post-test-remotebackend-post.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_post-test-remotebackend-post.Tpo -c -o test_remotebackend_post-test-remotebackend-post.obj `if test -f 'test-remotebackend-post.cc'; then $(CYGPATH_W) 'test-remotebackend-post.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-post.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_post-test-remotebackend-post.Tpo $(DEPDIR)/test_remotebackend_post-test-remotebackend-post.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-post.cc' object='test_remotebackend_post-test-remotebackend-post.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_post_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_post-test-remotebackend-post.obj `if test -f 'test-remotebackend-post.cc'; then $(CYGPATH_W) 'test-remotebackend-post.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-post.cc'; fi`
 
 test_remotebackend_unix-test-remotebackend.o: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_unix-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_unix-test-remotebackend.o -MD -MP -MF $(DEPDIR)/test_remotebackend_unix-test-remotebackend.Tpo -c -o test_remotebackend_unix-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_unix-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_unix-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_unix-test-remotebackend.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_unix-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
 
 test_remotebackend_unix-test-remotebackend.obj: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_unix-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_unix-test-remotebackend.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_unix-test-remotebackend.Tpo -c -o test_remotebackend_unix-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_unix-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_unix-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_unix-test-remotebackend.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_unix-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
 
 test_remotebackend_unix-test-remotebackend-unix.o: test-remotebackend-unix.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_unix-test-remotebackend-unix.o `test -f 'test-remotebackend-unix.cc' || echo '$(srcdir)/'`test-remotebackend-unix.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_unix-test-remotebackend-unix.o -MD -MP -MF $(DEPDIR)/test_remotebackend_unix-test-remotebackend-unix.Tpo -c -o test_remotebackend_unix-test-remotebackend-unix.o `test -f 'test-remotebackend-unix.cc' || echo '$(srcdir)/'`test-remotebackend-unix.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_unix-test-remotebackend-unix.Tpo $(DEPDIR)/test_remotebackend_unix-test-remotebackend-unix.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-unix.cc' object='test_remotebackend_unix-test-remotebackend-unix.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_unix-test-remotebackend-unix.o `test -f 'test-remotebackend-unix.cc' || echo '$(srcdir)/'`test-remotebackend-unix.cc
 
 test_remotebackend_unix-test-remotebackend-unix.obj: test-remotebackend-unix.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_unix-test-remotebackend-unix.obj `if test -f 'test-remotebackend-unix.cc'; then $(CYGPATH_W) 'test-remotebackend-unix.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-unix.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_unix-test-remotebackend-unix.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_unix-test-remotebackend-unix.Tpo -c -o test_remotebackend_unix-test-remotebackend-unix.obj `if test -f 'test-remotebackend-unix.cc'; then $(CYGPATH_W) 'test-remotebackend-unix.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-unix.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_unix-test-remotebackend-unix.Tpo $(DEPDIR)/test_remotebackend_unix-test-remotebackend-unix.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-unix.cc' object='test_remotebackend_unix-test-remotebackend-unix.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_unix_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_unix-test-remotebackend-unix.obj `if test -f 'test-remotebackend-unix.cc'; then $(CYGPATH_W) 'test-remotebackend-unix.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-unix.cc'; fi`
 
 test_remotebackend_zeromq-test-remotebackend.o: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_zeromq-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_zeromq-test-remotebackend.o -MD -MP -MF $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend.Tpo -c -o test_remotebackend_zeromq-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_zeromq-test-remotebackend.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_zeromq-test-remotebackend.o `test -f 'test-remotebackend.cc' || echo '$(srcdir)/'`test-remotebackend.cc
 
 test_remotebackend_zeromq-test-remotebackend.obj: test-remotebackend.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_zeromq-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_zeromq-test-remotebackend.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend.Tpo -c -o test_remotebackend_zeromq-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend.Tpo $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend.cc' object='test_remotebackend_zeromq-test-remotebackend.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_zeromq-test-remotebackend.obj `if test -f 'test-remotebackend.cc'; then $(CYGPATH_W) 'test-remotebackend.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend.cc'; fi`
 
 test_remotebackend_zeromq-test-remotebackend-zeromq.o: test-remotebackend-zeromq.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_zeromq-test-remotebackend-zeromq.o `test -f 'test-remotebackend-zeromq.cc' || echo '$(srcdir)/'`test-remotebackend-zeromq.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_zeromq-test-remotebackend-zeromq.o -MD -MP -MF $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend-zeromq.Tpo -c -o test_remotebackend_zeromq-test-remotebackend-zeromq.o `test -f 'test-remotebackend-zeromq.cc' || echo '$(srcdir)/'`test-remotebackend-zeromq.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend-zeromq.Tpo $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend-zeromq.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-zeromq.cc' object='test_remotebackend_zeromq-test-remotebackend-zeromq.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_zeromq-test-remotebackend-zeromq.o `test -f 'test-remotebackend-zeromq.cc' || echo '$(srcdir)/'`test-remotebackend-zeromq.cc
 
 test_remotebackend_zeromq-test-remotebackend-zeromq.obj: test-remotebackend-zeromq.cc
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_zeromq-test-remotebackend-zeromq.obj `if test -f 'test-remotebackend-zeromq.cc'; then $(CYGPATH_W) 'test-remotebackend-zeromq.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-zeromq.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -MT test_remotebackend_zeromq-test-remotebackend-zeromq.obj -MD -MP -MF $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend-zeromq.Tpo -c -o test_remotebackend_zeromq-test-remotebackend-zeromq.obj `if test -f 'test-remotebackend-zeromq.cc'; then $(CYGPATH_W) 'test-remotebackend-zeromq.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-zeromq.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend-zeromq.Tpo $(DEPDIR)/test_remotebackend_zeromq-test-remotebackend-zeromq.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='test-remotebackend-zeromq.cc' object='test_remotebackend_zeromq-test-remotebackend-zeromq.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_remotebackend_zeromq_CXXFLAGS) $(CXXFLAGS) -c -o test_remotebackend_zeromq-test-remotebackend-zeromq.obj `if test -f 'test-remotebackend-zeromq.cc'; then $(CYGPATH_W) 'test-remotebackend-zeromq.cc'; else $(CYGPATH_W) '$(srcdir)/test-remotebackend-zeromq.cc'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -1482,6 +1811,7 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f ../../pdns/$(DEPDIR)/$(am__dirstamp)
 	-rm -f ../../pdns/$(am__dirstamp)
 
 maintainer-clean-generic:
@@ -1494,6 +1824,7 @@ clean-am: clean-generic clean-libtool clean-local \
 	clean-pkglibLTLIBRARIES mostlyclean-am
 
 distclean: distclean-am
+	-rm -rf ../../pdns/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -1539,6 +1870,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
+	-rm -rf ../../pdns/$(DEPDIR) ./$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
