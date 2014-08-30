@@ -21,7 +21,7 @@ DESC="$ODESC"
 NAME=pdns
 DAEMON=/usr/sbin/pdns_server
 DAEMON_ARGS=""
-CONTROL=/usr/sbin/pdns_control
+CONTROL=/usr/bin/pdns_control
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
 
