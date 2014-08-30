@@ -10,11 +10,11 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([build-aux])
 
-AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip tar-ustar -Wno-portability subdir-objects no-dependencies 1.11])
+AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip tar-ustar -Wno-portability subdir-objects 1.11])
 AM_SILENT_RULES([yes])
 
 AC_CANONICAL_HOST
-: ${CXXFLAGS="-Wall -O2"}
+: ${CXXFLAGS="-Wall -g -O2"}
 
 AC_PROG_CC
 AM_PROG_CC_C_O
@@ -30,6 +30,11 @@ AS_IF([test "x$CXX" = "xno" || test "x$CXX:x$GXX" = "xg++:x"],
 
 AC_LANG([C++])
 
+AC_CC_PIE
+AC_CC_STACK_PROTECTOR
+AC_CC_PARAM_SSP_BUFFER_SIZE([4])
+AC_CC_D_FORTIFY_SOURCE
+
 AC_CHECK_FUNC([socket], [], [
  AC_CHECK_LIB([socket], [socket], [LIBS="-lsocket $LIBS"])
 ])
@@ -44,6 +49,8 @@ AC_PROG_LIBTOOL([disable-static])
 LT_INIT([disable-static])
 ])
 
+AC_LD_RELRO
+
 MC_TM_GMTOFF
 
 AM_CONDITIONAL([RELEASE_BUILD], [test "$PACKAGE_VERSION" != "git"])
@@ -56,7 +63,7 @@ eval full_libdir="\"$libdir\""
 # detect pkg-config explicitly
 PKG_PROG_PKG_CONFIG
 
-AC_CHECK_PROG([RAGEL], [ragel], [ragel])
+PDNS_CHECK_RAGEL
 AC_CHECK_PROG([ASCIIDOC], [asciidoc], [asciidoc])
 
 PDNS_WITH_LUA
@@ -324,6 +331,10 @@ done
 for a in $dynmodules; do
   moduledirs="$moduledirs ${a}backend"
 done
+
+CFLAGS="$CFLAGS $PIE_CFLAGS"
+CXXFLAGS="$CXXFLAGS $PIE_CFLAGS"
+LDFLAGS="$LDFLAGS $RELRO_LDFLAGS"
 
 AC_SUBST(LIBS)
 

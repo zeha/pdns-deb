@@ -129,7 +129,7 @@ EXTRA_PROGRAMS = pdns_recursor$(EXEEXT) sdig$(EXEEXT) saxfr$(EXEEXT) \
 subdir = pdns
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(srcdir)/pdns.in bindparser.hh bindparser.cc bindlexer.c \
-	$(top_srcdir)/build-aux/ylwrap \
+	$(top_srcdir)/build-aux/depcomp $(top_srcdir)/build-aux/ylwrap \
 	$(top_srcdir)/build-aux/test-driver
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/boost.m4 \
@@ -139,11 +139,16 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/boost.m4 \
 	$(top_srcdir)/m4/pdns_check_cdb.m4 \
 	$(top_srcdir)/m4/pdns_check_ldap.m4 \
 	$(top_srcdir)/m4/pdns_check_opendbx.m4 \
+	$(top_srcdir)/m4/pdns_check_ragel.m4 \
+	$(top_srcdir)/m4/pdns_d_fortify_source.m4 \
 	$(top_srcdir)/m4/pdns_enable_botan.m4 \
 	$(top_srcdir)/m4/pdns_enable_p11kit.m4 \
 	$(top_srcdir)/m4/pdns_enable_remotebackend_zeromq.m4 \
 	$(top_srcdir)/m4/pdns_enable_unit_tests.m4 \
 	$(top_srcdir)/m4/pdns_enable_verbose_logging.m4 \
+	$(top_srcdir)/m4/pdns_param_ssp_buffer_size.m4 \
+	$(top_srcdir)/m4/pdns_pie.m4 $(top_srcdir)/m4/pdns_relro.m4 \
+	$(top_srcdir)/m4/pdns_stack_protector.m4 \
 	$(top_srcdir)/m4/pdns_with_cryptopp.m4 \
 	$(top_srcdir)/m4/pdns_with_lmdb.m4 \
 	$(top_srcdir)/m4/pdns_with_lua.m4 \
@@ -151,7 +156,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/boost.m4 \
 	$(top_srcdir)/m4/pdns_with_oracle.m4 \
 	$(top_srcdir)/m4/pdns_with_postgresql.m4 \
 	$(top_srcdir)/m4/pdns_with_system_polarssl.m4 \
-	$(top_srcdir)/m4/tm-gmtoff.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/tm-gmtoff.m4 $(top_srcdir)/m4/warnings.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -308,6 +314,7 @@ pdns_control_LDADD = $(LDADD)
 pdns_control_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
 	$(CXXFLAGS) $(pdns_control_LDFLAGS) $(LDFLAGS) -o $@
+am__dirstamp = $(am__leading_dot)dirstamp
 am_pdns_recursor_OBJECTS = syncres.$(OBJEXT) misc.$(OBJEXT) \
 	unix_utility.$(OBJEXT) qtype.$(OBJEXT) logger.$(OBJEXT) \
 	statbag.$(OBJEXT) arguments.$(OBJEXT) lwres.$(OBJEXT) \
@@ -322,7 +329,9 @@ am_pdns_recursor_OBJECTS = syncres.$(OBJEXT) misc.$(OBJEXT) \
 	randomhelper.$(OBJEXT) recpacketcache.$(OBJEXT) dns.$(OBJEXT) \
 	nsecrecords.$(OBJEXT) base32.$(OBJEXT) ws-recursor.$(OBJEXT) \
 	ws-api.$(OBJEXT) webserver.$(OBJEXT) json.$(OBJEXT) \
-	version.$(OBJEXT) responsestats.$(OBJEXT) rec-carbon.$(OBJEXT)
+	version.$(OBJEXT) responsestats.$(OBJEXT) rec-carbon.$(OBJEXT) \
+	ext/yahttp/yahttp/reqresp.$(OBJEXT) \
+	ext/yahttp/yahttp/router.$(OBJEXT)
 pdns_recursor_OBJECTS = $(am_pdns_recursor_OBJECTS)
 pdns_recursor_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
@@ -359,7 +368,6 @@ am__pdns_server_SOURCES_DIST = dnspacket.cc nameserver.cc \
 	comment.hh auth-carbon.cc botan110signers.cc botansigners.cc \
 	botan18signers.cc cryptoppsigners.cc ssqlite3.cc ssqlite3.hh \
 	pkcs11signers.cc pkcs11signers.hh
-am__dirstamp = $(am__leading_dot)dirstamp
 @BOTAN110_TRUE@am__objects_2 = botan110signers.$(OBJEXT) \
 @BOTAN110_TRUE@	botansigners.$(OBJEXT)
 @BOTAN18_TRUE@am__objects_3 = botan18signers.$(OBJEXT) \
@@ -398,10 +406,9 @@ pdns_server_OBJECTS = $(am_pdns_server_OBJECTS)
 @ORACLE_TRUE@am__DEPENDENCIES_6 = $(am__DEPENDENCIES_1)
 pdns_server_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_3) $(am__DEPENDENCIES_4) \
-	$(am__DEPENDENCIES_5) $(am__DEPENDENCIES_6) \
-	$(am__DEPENDENCIES_2)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_3) \
+	$(am__DEPENDENCIES_4) $(am__DEPENDENCIES_5) \
+	$(am__DEPENDENCIES_6) $(am__DEPENDENCIES_2)
 pdns_server_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
 	$(CXXFLAGS) $(pdns_server_LDFLAGS) $(LDFLAGS) -o $@
@@ -438,10 +445,9 @@ am_pdnssec_OBJECTS = pdnssec.$(OBJEXT) dbdnsseckeeper.$(OBJEXT) \
 pdnssec_OBJECTS = $(am_pdnssec_OBJECTS)
 pdnssec_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_3) $(am__DEPENDENCIES_4) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_6) \
-	$(am__DEPENDENCIES_2)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_3) \
+	$(am__DEPENDENCIES_4) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_6) $(am__DEPENDENCIES_2)
 pdnssec_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
 	$(CXXFLAGS) $(pdnssec_LDFLAGS) $(LDFLAGS) -o $@
@@ -619,8 +625,9 @@ am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
 am__v_at_0 = @
 am__v_at_1 = 
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
-depcomp =
-am__depfiles_maybe =
+depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
+am__depfiles_maybe = depfiles
+am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 LTCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -1000,6 +1007,7 @@ BOTAN110_LIBS = @BOTAN110_LIBS@
 BOTAN18_CFLAGS = @BOTAN18_CFLAGS@
 BOTAN18_LIBS = @BOTAN18_LIBS@
 CC = @CC@
+CCDEPMODE = @CCDEPMODE@
 CDB_CFLAGS = @CDB_CFLAGS@
 CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
@@ -1009,9 +1017,11 @@ CRYPTOPP_CFLAGS = @CRYPTOPP_CFLAGS@
 CRYPTOPP_LIBS = @CRYPTOPP_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
+CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
+DEPDIR = @DEPDIR@
 DISTCHECK_CONFIGURE_FLAGS = @DISTCHECK_CONFIGURE_FLAGS@
 DLLTOOL = @DLLTOOL@
 DSYMUTIL = @DSYMUTIL@
@@ -1075,6 +1085,8 @@ PATH_SEPARATOR = @PATH_SEPARATOR@
 PGSQL_inc = @PGSQL_inc@
 PGSQL_lib = @PGSQL_lib@
 PGSQL_pg_config = @PGSQL_pg_config@
+PIE_CFLAGS = @PIE_CFLAGS@
+PIE_LDFLAGS = @PIE_LDFLAGS@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
@@ -1083,6 +1095,7 @@ POLARSSL_LIBS = @POLARSSL_LIBS@
 POLARSSL_SUBDIR = @POLARSSL_SUBDIR@
 RAGEL = @RAGEL@
 RANLIB = @RANLIB@
+RELRO_LDFLAGS = @RELRO_LDFLAGS@
 REMOTEBACKEND_ZEROMQ = @REMOTEBACKEND_ZEROMQ@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
@@ -1102,7 +1115,9 @@ ac_ct_AR = @ac_ct_AR@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_CXX = @ac_ct_CXX@
 ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
+am__include = @am__include@
 am__leading_dot = @am__leading_dot@
+am__quote = @am__quote@
 am__tar = @am__tar@
 am__untar = @am__untar@
 bindir = @bindir@
@@ -1193,9 +1208,9 @@ pdns_server_SOURCES = dnspacket.cc nameserver.cc tcpreceiver.hh \
 	$(am__append_11) $(am__append_13)
 pdns_server_LDFLAGS = @moduleobjects@ @modulelibs@ $(DYNLINKFLAGS) @LIBDL@ $(THREADFLAGS)  $(BOOST_SERIALIZATION_LDFLAGS) -rdynamic
 pdns_server_LDADD = $(POLARSSL_LIBS) $(BOOST_SERIALIZATION_LIBS) \
-	$(LUA_LIBS) $(SQLITE3_LIBS) $(YAHTTP_LIBS) $(PGSQL_lib) \
-	$(am__append_6) $(am__append_8) $(am__append_10) \
-	$(am__append_12) $(am__append_14)
+	$(LUA_LIBS) $(SQLITE3_LIBS) $(YAHTTP_LIBS) $(am__append_6) \
+	$(am__append_8) $(am__append_10) $(am__append_12) \
+	$(am__append_14)
 pdnssec_SOURCES = pdnssec.cc dbdnsseckeeper.cc sstuff.hh dnsparser.cc \
 	dnsparser.hh dnsrecords.cc dnswriter.cc dnswriter.hh misc.cc \
 	misc.hh rcpgenerator.cc rcpgenerator.hh base64.cc base64.hh \
@@ -1213,8 +1228,8 @@ pdnssec_SOURCES = pdnssec.cc dbdnsseckeeper.cc sstuff.hh dnsparser.cc \
 pdnssec_LDFLAGS = @moduleobjects@ @modulelibs@ $(DYNLINKFLAGS) @LIBDL@ $(THREADFLAGS) $(BOOST_PROGRAM_OPTIONS_LDFLAGS) $(BOOST_SERIALIZATION_LDFLAGS) 
 pdnssec_LDADD = $(POLARSSL_LIBS) $(BOOST_PROGRAM_OPTIONS_LIBS) \
 	$(BOOST_SERIALIZATION_LIBS) $(SQLITE3_LIBS) $(YAHTTP_LIBS) \
-	$(PGSQL_lib) $(am__append_17) $(am__append_19) \
-	$(am__append_21) $(am__append_23) $(am__append_25)
+	$(am__append_17) $(am__append_19) $(am__append_21) \
+	$(am__append_23) $(am__append_25)
 zone2sql_SOURCES = bindparser.yy bindlexer.l bind-dnssec.schema.sqlite3.sql.h \
 	arguments.cc logger.cc zone2sql.cc statbag.cc misc.cc \
 	unix_utility.cc qtype.cc dns.cc \
@@ -1379,7 +1394,8 @@ dns_random.cc \
 lua-pdns.cc lua-pdns.hh lua-recursor.cc lua-recursor.hh randomhelper.cc  \
 recpacketcache.cc recpacketcache.hh dns.cc nsecrecords.cc base32.cc cachecleaner.hh \
 ws-recursor.cc ws-recursor.hh ws-api.cc ws-api.hh webserver.cc webserver.hh \
-json.cc json.hh version.hh version.cc responsestats.cc rec-carbon.cc
+json.cc json.hh version.hh version.cc responsestats.cc rec-carbon.cc ext/yahttp/yahttp/reqresp.cpp \
+ext/yahttp/yahttp/router.cpp
 
 pdns_recursor_LDFLAGS = $(LUA_LIBS)
 pdns_recursor_LDADD = $(POLARSSL_LIBS) $(YAHTTP_LIBS)
@@ -1400,7 +1416,7 @@ all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
 .SUFFIXES:
-.SUFFIXES: .c .cc .h .hh .l .lo .log .o .obj .test .test$(EXEEXT) .trs .yy
+.SUFFIXES: .c .cc .cpp .h .hh .l .lo .log .o .obj .test .test$(EXEEXT) .trs .yy
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -1410,9 +1426,9 @@ $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign --ignore-deps pdns/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign pdns/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --foreign --ignore-deps pdns/Makefile
+	  $(AUTOMAKE) --foreign pdns/Makefile
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
@@ -1583,6 +1599,17 @@ nsec3dig$(EXEEXT): $(nsec3dig_OBJECTS) $(nsec3dig_DEPENDENCIES) $(EXTRA_nsec3dig
 pdns_control$(EXEEXT): $(pdns_control_OBJECTS) $(pdns_control_DEPENDENCIES) $(EXTRA_pdns_control_DEPENDENCIES) 
 	@rm -f pdns_control$(EXEEXT)
 	$(AM_V_CXXLD)$(pdns_control_LINK) $(pdns_control_OBJECTS) $(pdns_control_LDADD) $(LIBS)
+ext/yahttp/yahttp/$(am__dirstamp):
+	@$(MKDIR_P) ext/yahttp/yahttp
+	@: > ext/yahttp/yahttp/$(am__dirstamp)
+ext/yahttp/yahttp/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ext/yahttp/yahttp/$(DEPDIR)
+	@: > ext/yahttp/yahttp/$(DEPDIR)/$(am__dirstamp)
+ext/yahttp/yahttp/reqresp.$(OBJEXT):  \
+	ext/yahttp/yahttp/$(am__dirstamp) \
+	ext/yahttp/yahttp/$(DEPDIR)/$(am__dirstamp)
+ext/yahttp/yahttp/router.$(OBJEXT): ext/yahttp/yahttp/$(am__dirstamp) \
+	ext/yahttp/yahttp/$(DEPDIR)/$(am__dirstamp)
 
 pdns_recursor$(EXEEXT): $(pdns_recursor_OBJECTS) $(pdns_recursor_DEPENDENCIES) $(EXTRA_pdns_recursor_DEPENDENCIES) 
 	@rm -f pdns_recursor$(EXEEXT)
@@ -1590,7 +1617,11 @@ pdns_recursor$(EXEEXT): $(pdns_recursor_OBJECTS) $(pdns_recursor_DEPENDENCIES) $
 backends/gsql/$(am__dirstamp):
 	@$(MKDIR_P) backends/gsql
 	@: > backends/gsql/$(am__dirstamp)
-backends/gsql/gsqlbackend.$(OBJEXT): backends/gsql/$(am__dirstamp)
+backends/gsql/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) backends/gsql/$(DEPDIR)
+	@: > backends/gsql/$(DEPDIR)/$(am__dirstamp)
+backends/gsql/gsqlbackend.$(OBJEXT): backends/gsql/$(am__dirstamp) \
+	backends/gsql/$(DEPDIR)/$(am__dirstamp)
 
 pdns_server$(EXEEXT): $(pdns_server_OBJECTS) $(pdns_server_DEPENDENCIES) $(EXTRA_pdns_server_DEPENDENCIES) 
 	@rm -f pdns_server$(EXEEXT)
@@ -1650,27 +1681,201 @@ zone2sql$(EXEEXT): $(zone2sql_OBJECTS) $(zone2sql_DEPENDENCIES) $(EXTRA_zone2sql
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f backends/gsql/*.$(OBJEXT)
+	-rm -f ext/yahttp/yahttp/*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/arguments.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-carbon.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/base32.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/base64.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bindlexer.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bindparser.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/botan110signers.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/botan18signers.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/botansigners.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/common_startup.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/communicator.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cryptoppsigners.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbdnsseckeeper.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dns.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dns_random.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsbackend.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsbulktest.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsdemog.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsdist.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsgram.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnslabeltext.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnspacket.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsparser.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnspcap.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsproxy.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsrecords.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsreplay.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsscan.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnsscope.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnssecinfra.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnssecsigner.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnstcpbench.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnswasher.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dnswriter.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dynhandler.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dynlistener.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dynloader.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dynmessenger.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ednssubnet.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/epollmplexer.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/htimer.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iputils.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/json.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/logger.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lua-auth.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lua-pdns.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lua-recursor.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lwres.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mastercommunicator.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/misc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nameserver.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/notify.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nproxy.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nsec3dig.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nsecrecords.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/packetcache.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/packethandler.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pdns_recursor.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pdnssec.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pkcs11signers.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/polarrsakeyinfra.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/qtype.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/randomhelper.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rcpgenerator.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rec-carbon.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rec_channel.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rec_channel_rec.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rec_control.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/receiver.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/recpacketcache.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/recursor_cache.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/reczones.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/resolver.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/responsestats.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rfc2136handler.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/saxfr.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sdig.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/selectmplexer.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/serialtweaker.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/signingpipe.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sillyrecords.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/slavecommunicator.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/speedtest.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ssqlite3.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/statbag.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/syncres.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tcpreceiver.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-base32_cc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-base64_cc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-bindparser_cc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dns_random_hh.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dnsrecords_cc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-iputils_hh.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-md5_hh.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-misc_hh.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-nameserver_cc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-rcpgenerator_cc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-sha_hh.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-zoneparser_tng_cc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/testrunner.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/toysdig.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tsig-tests.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ueberbackend.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unix_semaphore.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/unix_utility.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/version.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/webserver.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ws-api.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ws-auth.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ws-recursor.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/zone2json.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/zone2ldap.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/zone2lmdb.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/zone2sql.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/zoneparser-tng.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@backends/gsql/$(DEPDIR)/gsqlbackend.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ext/yahttp/yahttp/$(DEPDIR)/reqresp.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@ext/yahttp/yahttp/$(DEPDIR)/router.Po@am__quote@
+
 .c.o:
-	$(AM_V_CC)$(COMPILE) -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ $<
 
 .c.obj:
-	$(AM_V_CC)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .c.lo:
-	$(AM_V_CC)$(LTCOMPILE) -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCC_TRUE@	$(LTCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCC_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
 
 .cc.o:
-	$(AM_V_CXX)$(CXXCOMPILE) -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
 
 .cc.obj:
-	$(AM_V_CXX)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .cc.lo:
-	$(AM_V_CXX)$(LTCXXCOMPILE) -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
+
+.cpp.o:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
+
+.cpp.obj:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.obj$$||'`;\
+@am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ `$(CYGPATH_W) '$<'` &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.cpp.lo:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.lo$$||'`;\
+@am__fastdepCXX_TRUE@	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
+@am__fastdepCXX_TRUE@	$(am__mv) $$depbase.Tpo $$depbase.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
 
 .l.c:
 	$(AM_V_LEX)$(am__skiplex) $(SHELL) $(YLWRAP) $< $(LEX_OUTPUT_ROOT).c $@ -- $(LEXCOMPILE)
@@ -2064,7 +2269,10 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f backends/gsql/$(DEPDIR)/$(am__dirstamp)
 	-rm -f backends/gsql/$(am__dirstamp)
+	-rm -f ext/yahttp/yahttp/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ext/yahttp/yahttp/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -2079,6 +2287,7 @@ clean-am: clean-binPROGRAMS clean-generic clean-libtool \
 	clean-sbinPROGRAMS mostlyclean-am
 
 distclean: distclean-recursive
+	-rm -rf ./$(DEPDIR) backends/gsql/$(DEPDIR) ext/yahttp/yahttp/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -2125,6 +2334,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-recursive
+	-rm -rf ./$(DEPDIR) backends/gsql/$(DEPDIR) ext/yahttp/yahttp/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

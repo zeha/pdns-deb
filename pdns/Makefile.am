@@ -70,7 +70,7 @@ comment.hh auth-carbon.cc
 
 
 pdns_server_LDFLAGS=@moduleobjects@ @modulelibs@ $(DYNLINKFLAGS) @LIBDL@ $(THREADFLAGS)  $(BOOST_SERIALIZATION_LDFLAGS) -rdynamic
-pdns_server_LDADD= $(POLARSSL_LIBS) $(BOOST_SERIALIZATION_LIBS) $(LUA_LIBS) $(SQLITE3_LIBS) $(YAHTTP_LIBS) $(PGSQL_lib)
+pdns_server_LDADD= $(POLARSSL_LIBS) $(BOOST_SERIALIZATION_LIBS) $(LUA_LIBS) $(SQLITE3_LIBS) $(YAHTTP_LIBS)
 
 if BOTAN110
 pdns_server_SOURCES += botan110signers.cc botansigners.cc
@@ -113,7 +113,7 @@ pdnssec_SOURCES=pdnssec.cc dbdnsseckeeper.cc sstuff.hh dnsparser.cc dnsparser.hh
 	serialtweaker.cc randomhelper.cc
 
 pdnssec_LDFLAGS=@moduleobjects@ @modulelibs@ $(DYNLINKFLAGS) @LIBDL@ $(THREADFLAGS) $(BOOST_PROGRAM_OPTIONS_LDFLAGS) $(BOOST_SERIALIZATION_LDFLAGS) 
-pdnssec_LDADD= $(POLARSSL_LIBS) $(BOOST_PROGRAM_OPTIONS_LIBS) $(BOOST_SERIALIZATION_LIBS) $(SQLITE3_LIBS) $(YAHTTP_LIBS) $(PGSQL_lib)
+pdnssec_LDADD= $(POLARSSL_LIBS) $(BOOST_PROGRAM_OPTIONS_LIBS) $(BOOST_SERIALIZATION_LIBS) $(SQLITE3_LIBS) $(YAHTTP_LIBS)
 
 zone2sql_SOURCES=bindparser.yy bindlexer.l bind-dnssec.schema.sqlite3.sql.h \
 	arguments.cc logger.cc zone2sql.cc statbag.cc misc.cc \
@@ -339,7 +339,8 @@ dns_random.cc \
 lua-pdns.cc lua-pdns.hh lua-recursor.cc lua-recursor.hh randomhelper.cc  \
 recpacketcache.cc recpacketcache.hh dns.cc nsecrecords.cc base32.cc cachecleaner.hh \
 ws-recursor.cc ws-recursor.hh ws-api.cc ws-api.hh webserver.cc webserver.hh \
-json.cc json.hh version.hh version.cc responsestats.cc rec-carbon.cc
+json.cc json.hh version.hh version.cc responsestats.cc rec-carbon.cc ext/yahttp/yahttp/reqresp.cpp \
+ext/yahttp/yahttp/router.cpp
 
 pdns_recursor_LDFLAGS= $(LUA_LIBS)
 pdns_recursor_LDADD= $(POLARSSL_LIBS) $(YAHTTP_LIBS)
