@@ -39,7 +39,9 @@ override_dh_fixperms:
 
 # init script needs to be named pdns, not pdns-server
 override_dh_installinit:
+	dh_systemd_enable --name=pdns
 	dh_installinit --name=pdns
+	dh_systemd_start --restart-after-upgrade
 
 # Verbose build (shows used compiler/linker and their flags)
 override_dh_auto_build-arch:
