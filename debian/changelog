@@ -1,3 +1,12 @@
+pdns (3.4.0~rc1+2014082902-1) experimental; urgency=medium
+
+  * Fix typo in init script, causing stop to not work
+  * Add a smoke test as an autopkgtest
+  * Install systemd unit file for pdns
+  * Imported Upstream version 3.4.0~rc1+2014082902
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Sun, 31 Aug 2014 07:33:48 +0200
+
 pdns (3.4.0~rc1+20140829-1) experimental; urgency=medium
 
   * Imported Upstream version 3.4.0~rc1+20140829
