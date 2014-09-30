@@ -1,8 +1,8 @@
 AC_PREREQ([2.61])
 
 dnl The following lines may be patched by set-version-auth.
-AC_INIT([pdns], [git])
-dnl AC_SUBST([DIST_HOST], [TO_BE_PATCHED])
+AC_INIT([pdns], [3.4.0])
+AC_SUBST([DIST_HOST], [jenkins@autotest.powerdns.com])
 dnl End patch area.
 
 AC_CONFIG_SRCDIR([pdns/receiver.cc])
@@ -62,6 +62,16 @@ eval full_libdir="\"$libdir\""
 
 # detect pkg-config explicitly
 PKG_PROG_PKG_CONFIG
+
+AC_CHECK_HEADERS(
+	[sys/mman.h],
+	[AC_CHECK_FUNC(
+		[mmap],
+		[AC_DEFINE(HAVE_MMAP, [1], [Define to 1 if you have mmap])],
+		[have_mmap=no]
+	)],
+	[have_mmap=no]
+)
 
 PDNS_CHECK_RAGEL
 AC_CHECK_PROG([ASCIIDOC], [asciidoc], [asciidoc])
@@ -159,7 +169,7 @@ linux*)
   THREADFLAGS="-pthread"
   CXXFLAGS="-D_GNU_SOURCE $CXXFLAGS"
   ;;
-darwin11* | darwin12* | darwin13*)
+darwin*)
   AC_DEFINE(HAVE_IPV6,1,[If the host operating system understands IPv6])
   DYNLINKFLAGS="-rdynamic"
   LDFLAGS="-pthread $LDFLAGS"
@@ -284,6 +294,9 @@ for a in $modules $dynmodules; do
     tinydns)
       PDNS_CHECK_CDB
       ;;
+    geoip)
+      PDNS_CHECK_GEOIP
+      ;;
   esac
 done
 
@@ -358,6 +371,7 @@ AC_CONFIG_FILES([
   modules/bindbackend/Makefile
   modules/db2backend/Makefile
   modules/geobackend/Makefile
+  modules/geoipbackend/Makefile
   modules/gmysqlbackend/Makefile
   modules/goraclebackend/Makefile
   modules/gpgsqlbackend/Makefile

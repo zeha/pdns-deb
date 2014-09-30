@@ -1,6 +1,6 @@
 BuildRoot: /tmp/pdns
 Name: pdns-static
-Version: 3.3
+Version: 3.4.0
 Release: 1
 Summary: extremely powerful and versatile nameserver
 License: GPL
@@ -70,3 +70,4 @@ These are the tools
 "/usr/man/man8/dnsscope.8"
 "/usr/man/man8/dnswasher.8"
 "/usr/man/man1/dnstcpbench.1"
+"/usr/man/man1/dnsdist.1"

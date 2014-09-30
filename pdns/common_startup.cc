@@ -173,6 +173,8 @@ void declareStats(void)
   S.declare("udp6-answers","Number of IPv6 answers sent out over UDP");
   S.declare("udp6-queries","Number of IPv6 UDP queries received");
 
+  S.declare("rd-queries", "Number of recursion desired questions");
+  S.declare("recursion-unanswered", "Number of packets unanswered by configured recursor");
   S.declare("recursing-answers","Number of recursive answers sent out");
   S.declare("recursing-questions","Number of questions sent to recursor");
   S.declare("corrupt-packets","Number of corrupt packets received");
@@ -256,7 +258,12 @@ void *qthread(void *number)
   // other than the first one.
   if( number != NULL && NS->canReusePort() ) {
     L<<Logger::Notice<<"Starting new listen thread on the same IPs/ports using SO_REUSEPORT"<<endl;
-    NS = new UDPNameserver( true );
+    try {
+      NS = new UDPNameserver( true );
+    } catch(PDNSException &e) {
+      L<<Logger::Error<<"Unable to reuse port, falling back to original bind"<<endl;
+      NS = N;
+    }
   }
 
   for(;;) {
