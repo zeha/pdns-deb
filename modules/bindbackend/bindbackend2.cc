@@ -296,19 +296,16 @@ void Bind2Backend::getUpdatedMasters(vector<DomainInfo> *changedDomains)
 
     for(state_t::const_iterator i = s_state.begin(); i != s_state.end() ; ++i) {
       if(!i->d_masters.empty() && this->alsoNotify.empty() && i->d_also_notify.empty())
-	continue;
-    
+        continue;
+
       DomainInfo di;
       di.id=i->d_id;
-
       di.zone=i->d_name;
       di.last_check=i->d_lastcheck;
-      di.notified_serial = i->d_lastnotified;
+      di.notified_serial=i->d_lastnotified;
       di.backend=this;
       di.kind=DomainInfo::Master;
-      if(!i->d_lastnotified)  {          // don't do notification storm on startup 
-	consider.push_back(di);
-      }
+      consider.push_back(di);
     }
   }
 
@@ -318,57 +315,75 @@ void Bind2Backend::getUpdatedMasters(vector<DomainInfo> *changedDomains)
     try {
       this->getSOA(di.zone, soadata); // we might not *have* a SOA yet, but this might trigger a load of it
     }
-    catch(...){}
-    BB2DomainInfo bbd;
-    if(safeGetBBDomainInfo(di.id, &bbd)) { 
-      bbd.d_lastnotified=soadata.serial; 
-      safePutBBDomainInfo(bbd);
+    catch(...) {
+      continue;
     }
-    di.serial=soadata.serial;    
-    if(soadata.serial != di.notified_serial)
-      changedDomains->push_back(di);
+    if(di.notified_serial != soadata.serial) {
+      BB2DomainInfo bbd;
+      if(safeGetBBDomainInfo(di.id, &bbd)) {
+        bbd.d_lastnotified=soadata.serial;
+        safePutBBDomainInfo(bbd);
+      }
+      if(di.notified_serial)  { // don't do notification storm on startup
+        di.serial=soadata.serial;
+        changedDomains->push_back(di);
+      }
+    }
   }
 }
 
 void Bind2Backend::getAllDomains(vector<DomainInfo> *domains, bool include_disabled) 
 {
-  ReadLock rl(&s_state_lock);
   SOAData soadata;
 
-  for(state_t::const_iterator i = s_state.begin(); i != s_state.end() ; ++i) {
-    soadata.db=(DNSBackend *)-1; // makes getSOA() skip the cache. 
-    this->getSOA(i->d_name, soadata);
-    DomainInfo di;
-    di.id=i->d_id;
-    di.serial=soadata.serial;
-    di.zone=i->d_name;
-    di.last_check=i->d_lastcheck;
-    di.backend=this;
-    di.kind=i->d_masters.empty() ? DomainInfo::Master : DomainInfo::Slave; //TODO: what about Native?
+  // prevent deadlock by using getSOA() later on
+  {
+    ReadLock rl(&s_state_lock);
 
-    domains->push_back(di);
+    for(state_t::const_iterator i = s_state.begin(); i != s_state.end() ; ++i) {
+      DomainInfo di;
+      di.id=i->d_id;
+      di.zone=i->d_name;
+      di.last_check=i->d_lastcheck;
+      di.kind=i->d_masters.empty() ? DomainInfo::Master : DomainInfo::Slave; //TODO: what about Native?
+      di.backend=this;
+      domains->push_back(di);
+    };
+  }
+ 
+  BOOST_FOREACH(DomainInfo &di, *domains) {
+    soadata.db=(DNSBackend *)-1; // makes getSOA() skip the cache. 
+    this->getSOA(di.zone, soadata);
+    di.serial=soadata.serial;
   }
 }
 
 void Bind2Backend::getUnfreshSlaveInfos(vector<DomainInfo> *unfreshDomains)
 {
-  ReadLock rl(&s_state_lock);
-  for(state_t::const_iterator i = s_state.begin(); i != s_state.end() ; ++i) {
-    if(i->d_masters.empty())
-      continue;
-    DomainInfo sd;
-    sd.id=i->d_id;
-    sd.zone=i->d_name;
-    sd.masters=i->d_masters;
-    sd.last_check=i->d_lastcheck;
-    sd.backend=this;
-    sd.kind=DomainInfo::Slave;
+  vector<DomainInfo> domains;
+  {
+    ReadLock rl(&s_state_lock);
+    for(state_t::const_iterator i = s_state.begin(); i != s_state.end() ; ++i) {
+      if(i->d_masters.empty())
+        continue;
+      DomainInfo sd;
+      sd.id=i->d_id;
+      sd.zone=i->d_name;
+      sd.masters=i->d_masters;
+      sd.last_check=i->d_lastcheck;
+      sd.backend=this;
+      sd.kind=DomainInfo::Slave;
+      domains.push_back(sd);
+    }
+  }
+
+  BOOST_FOREACH(DomainInfo &sd, domains) {
     SOAData soadata;
     soadata.refresh=0;
     soadata.serial=0;
     soadata.db=(DNSBackend *)-1; // not sure if this is useful, inhibits any caches that might be around
     try {
-      getSOA(i->d_name,soadata); // we might not *have* a SOA yet
+      getSOA(sd.zone,soadata); // we might not *have* a SOA yet
     }
     catch(...){}
     sd.serial=soadata.serial;
@@ -668,7 +683,7 @@ void Bind2Backend::fixupAuth(shared_ptr<recordstorage_t> records)
 
 void Bind2Backend::doEmptyNonTerminals(BB2DomainInfo& bbd, bool nsec3zone, NSEC3PARAMRecordContent ns3pr)
 {
-  shared_ptr<recordstorage_t> records = bbd.d_records.getWRITABLE();
+  shared_ptr<const recordstorage_t> records = bbd.d_records.get();
   bool auth, doent=true;
   set<string> qnames;
   map<string, bool> nonterm;
@@ -1063,7 +1078,8 @@ void Bind2Backend::lookup(const QType &qtype, const string &qname, DNSPacket *pk
   if(!bbd.current()) {
     L<<Logger::Warning<<"Zone '"<<bbd.d_name<<"' ("<<bbd.d_filename<<") needs reloading"<<endl;
     queueReloadAndStore(bbd.d_id);
-    throw DBException("Zone for '"+bbd.d_name+"' in '"+bbd.d_filename+"' being reloaded"); // if we don't throw here, we crash for some reason
+    if (!safeGetBBDomainInfo(domain, &bbd))
+      throw DBException("Zone '"+bbd.d_name+"' ("+bbd.d_filename+") gone after reload"); // if we don't throw here, we crash for some reason
   }
 
   d_handle.d_records = bbd.d_records.get();

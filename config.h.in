@@ -24,6 +24,9 @@
 /* Define to 1 if you have botan 1.10 */
 #undef HAVE_BOTAN18
 
+/* Define to 1 if you have the <cdb.h> header file. */
+#undef HAVE_CDB_H
+
 /* Define to 1 if you have crypto++ */
 #undef HAVE_CRYPTOPP
 
@@ -84,6 +87,9 @@
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
 
+/* Define to 1 if you have mmap */
+#undef HAVE_MMAP
+
 /* Define to 1 if you have the <odbx.h> header file. */
 #undef HAVE_ODBX_H
 
@@ -111,6 +117,9 @@
 /* Define to 1 if you have the <string.h> header file. */
 #undef HAVE_STRING_H
 
+/* Define to 1 if you have the <sys/mman.h> header file. */
+#undef HAVE_SYS_MMAN_H
+
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #undef HAVE_SYS_STAT_H
 
@@ -135,6 +144,9 @@
 
 /* If host OS misses RTLD_NOW */
 #undef NEED_RTLD_NOW
+
+/* Define to 1 if your C compiler doesn't accept -c and -o together. */
+#undef NO_MINUS_C_MINUS_O
 
 /* Name of package */
 #undef PACKAGE
