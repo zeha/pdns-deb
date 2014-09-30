@@ -1,3 +1,9 @@
+pdns (3.4.0-1) unstable; urgency=medium
+
+  * New upstream release, send to unstable.
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Tue, 30 Sep 2014 11:55:46 +0200
+
 pdns (3.4.0~rc1+2014082902-1) experimental; urgency=medium
 
   * Fix typo in init script, causing stop to not work
