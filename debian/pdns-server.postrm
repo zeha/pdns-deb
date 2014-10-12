@@ -16,6 +16,9 @@ case "$1" in
   ;;
 
   purge)
+    # Remove pseudo-conffile.
+    rm -f /etc/powerdns/bindbackend.conf
+
     # Remove files registered with ucf.
     # this has been pulled from aide-common.postrm
     
