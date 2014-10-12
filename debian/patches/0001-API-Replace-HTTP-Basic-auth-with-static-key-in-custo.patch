@@ -1,0 +1,310 @@
+From bbef8f04823bcd8b5f7bba9e319016d7df4359d0 Mon Sep 17 00:00:00 2001
+From: Christian Hofstaedtler <christian@hofstaedtler.name>
+Date: Mon, 6 Oct 2014 23:51:01 +0200
+Subject: [PATCH] API: Replace HTTP Basic auth with static key in custom
+ header
+
+Given that the key is sent in a custom header, this should prevent
+any possible CSRF attacks.
+
+Fixes #1769.
+---
+ pdns/common_startup.cc              |  1 +
+ pdns/docs/pdns.xml                  |  8 ++++
+ pdns/pdns.conf-dist                 |  5 ++
+ pdns/pdns_recursor.cc               |  1 +
+ pdns/webserver.cc                   | 93 ++++++++++++++++++++++++++-----------
+ pdns/webserver.hh                   | 11 ++++-
+ pdns/ws-auth.cc                     |  6 +--
+ pdns/ws-recursor.cc                 |  2 +-
+ pdns/ws-recursor.hh                 |  4 +-
+ 13 files changed, 114 insertions(+), 54 deletions(-)
+
+diff --git a/pdns/common_startup.cc b/pdns/common_startup.cc
+index ada2c88..7fdf047 100644
+--- a/pdns/common_startup.cc
++++ b/pdns/common_startup.cc
+@@ -61,6 +61,7 @@ void declareArguments()
+   ::arg().set("retrieval-threads", "Number of AXFR-retrieval threads for slave operation")="2";
+   ::arg().setSwitch("experimental-json-interface", "If the webserver should serve JSON data")="no";
+   ::arg().setSwitch("experimental-api-readonly", "If the JSON API should disallow data modification")="no";
++  ::arg().set("experimental-api-key", "REST API Static authentication key (required for API use)")="";
+   ::arg().setSwitch("experimental-dname-processing", "If we should support DNAME records")="no";
+ 
+   ::arg().setCmd("help","Provide a helpful message");
+diff --git a/pdns/pdns.conf-dist b/pdns/pdns.conf-dist
+index ec203c0..bc5ae5d 100644
+--- a/pdns/pdns.conf-dist
++++ b/pdns/pdns.conf-dist
+@@ -145,6 +145,11 @@
+ # entropy-source=/dev/urandom
+ 
+ #################################
++# experimental-api-key	REST API Static authentication key (required for API use)
++#
++# experimental-api-key=
++
++#################################
+ # experimental-api-readonly	If the JSON API should disallow data modification
+ #
+ # experimental-api-readonly=no
+diff --git a/pdns/pdns_recursor.cc b/pdns/pdns_recursor.cc
+index d5cae24..2a4b8ae 100644
+--- a/pdns/pdns_recursor.cc
++++ b/pdns/pdns_recursor.cc
+@@ -2101,6 +2101,7 @@ int main(int argc, char **argv)
+     ::arg().set("experimental-webserver-password", "Password required for accessing the webserver") = "";
+     ::arg().set("webserver-allow-from","Webserver access is only allowed from these subnets")="0.0.0.0/0,::/0";
+     ::arg().set("experimental-api-config-dir", "Directory where REST API stores config and zones") = "";
++    ::arg().set("experimental-api-key", "REST API Static authentication key (required for API use)") = "";
+     ::arg().set("carbon-ourname", "If set, overrides our reported hostname for carbon stats")="";
+     ::arg().set("carbon-server", "If set, send metrics in carbon (graphite) format to this server")="";
+     ::arg().set("carbon-interval", "Number of seconds between carbon (graphite) updates")="30";
+diff --git a/pdns/webserver.cc b/pdns/webserver.cc
+index 6bcda50..cf993a1 100644
+--- a/pdns/webserver.cc
++++ b/pdns/webserver.cc
+@@ -48,6 +48,37 @@ void HttpRequest::json(rapidjson::Document& document)
+   }
+ }
+ 
++bool HttpRequest::compareAuthorization(const string &expected_password)
++{
++  // validate password
++  YaHTTP::strstr_map_t::iterator header = headers.find("authorization");
++  bool auth_ok = false;
++  if (header != headers.end() && toLower(header->second).find("basic ") == 0) {
++    string cookie = header->second.substr(6);
++
++    string plain;
++    B64Decode(cookie, plain);
++
++    vector<string> cparts;
++    stringtok(cparts, plain, ":");
++
++    // this gets rid of terminating zeros
++    auth_ok = (cparts.size()==2 && (0==strcmp(cparts[1].c_str(), expected_password.c_str())));
++  }
++  return auth_ok;
++}
++
++bool HttpRequest::compareHeader(const string &header_name, const string &expected_value)
++{
++  YaHTTP::strstr_map_t::iterator header = headers.find(header_name);
++  if (header == headers.end())
++    return false;
++
++  // this gets rid of terminating zeros
++  return (0==strcmp(header->second.c_str(), expected_value.c_str()));
++}
++
++
+ void HttpResponse::setBody(rapidjson::Document& document)
+ {
+   this->body = makeStringFromDocument(document);
+@@ -58,19 +89,30 @@ int WebServer::B64Decode(const std::string& strInput, std::string& strOutput)
+   return ::B64Decode(strInput, strOutput);
+ }
+ 
+-static void handlerWrapper(WebServer::HandlerFunction handler, YaHTTP::Request* req, YaHTTP::Response* resp)
++static void bareHandlerWrapper(WebServer::HandlerFunction handler, YaHTTP::Request* req, YaHTTP::Response* resp)
+ {
+   // wrapper to convert from YaHTTP::* to our subclasses
+   handler(static_cast<HttpRequest*>(req), static_cast<HttpResponse*>(resp));
+ }
+ 
+-void WebServer::registerHandler(const string& url, HandlerFunction handler)
++void WebServer::registerBareHandler(const string& url, HandlerFunction handler)
+ {
+-  YaHTTP::THandlerFunction f = boost::bind(&handlerWrapper, handler, _1, _2);
++  YaHTTP::THandlerFunction f = boost::bind(&bareHandlerWrapper, handler, _1, _2);
+   YaHTTP::Router::Any(url, f);
+ }
+ 
+ static void apiWrapper(WebServer::HandlerFunction handler, HttpRequest* req, HttpResponse* resp) {
++  const string& api_key = arg()["experimental-api-key"];
++  if (api_key.empty()) {
++    L<<Logger::Debug<<"HTTP API Request \"" << req->url.path << "\": Authentication failed, API Key missing in config" << endl;
++    throw HttpUnauthorizedException();
++  }
++  bool auth_ok = req->compareHeader("x-api-key", api_key);
++  if (!auth_ok) {
++    L<<Logger::Debug<<"HTTP Request \"" << req->url.path << "\": Authentication by API Key failed" << endl;
++    throw HttpUnauthorizedException();
++  }
++
+   resp->headers["Access-Control-Allow-Origin"] = "*";
+   resp->headers["Content-Type"] = "application/json";
+ 
+@@ -108,7 +150,25 @@ static void apiWrapper(WebServer::HandlerFunction handler, HttpRequest* req, Htt
+ 
+ void WebServer::registerApiHandler(const string& url, HandlerFunction handler) {
+   HandlerFunction f = boost::bind(&apiWrapper, handler, _1, _2);
+-  registerHandler(url, f);
++  registerBareHandler(url, f);
++}
++
++static void webWrapper(WebServer::HandlerFunction handler, HttpRequest* req, HttpResponse* resp) {
++  const string& web_password = arg()["webserver-password"];
++  if (!web_password.empty()) {
++    bool auth_ok = req->compareAuthorization(web_password);
++    if (!auth_ok) {
++      L<<Logger::Debug<<"HTTP Request \"" << req->url.path << "\": Web Authentication failed" << endl;
++      throw HttpUnauthorizedException();
++    }
++  }
++
++  handler(req, resp);
++}
++
++void WebServer::registerWebHandler(const string& url, HandlerFunction handler) {
++  HandlerFunction f = boost::bind(&webWrapper, handler, _1, _2);
++  registerBareHandler(url, f);
+ }
+ 
+ static void *WebServerConnectionThreadStart(void *p) {
+@@ -148,28 +208,6 @@ HttpResponse WebServer::handleRequest(HttpRequest req)
+       }
+     }
+ 
+-    if (!d_password.empty()) {
+-      // validate password
+-      header = req.headers.find("authorization");
+-      bool auth_ok = false;
+-      if (header != req.headers.end() && toLower(header->second).find("basic ") == 0) {
+-        string cookie = header->second.substr(6);
+-
+-        string plain;
+-        B64Decode(cookie, plain);
+-
+-        vector<string> cparts;
+-        stringtok(cparts, plain, ":");
+-
+-        // this gets rid of terminating zeros
+-        auth_ok = (cparts.size()==2 && (0==strcmp(cparts[1].c_str(), d_password.c_str())));
+-      }
+-      if (!auth_ok) {
+-        L<<Logger::Debug<<"HTTP Request \"" << req.url.path << "\": Authentication failed" << endl;
+-        throw HttpUnauthorizedException();
+-      }
+-    }
+-
+     YaHTTP::THandlerFunction handler;
+     if (!YaHTTP::Router::Route(&req, handler)) {
+       L<<Logger::Debug<<"HTTP: No route found for \"" << req.url.path << "\"" << endl;
+@@ -268,11 +306,10 @@ catch(...) {
+   L<<Logger::Error<<"HTTP: Unknown exception"<<endl;
+ }
+ 
+-WebServer::WebServer(const string &listenaddress, int port, const string &password) : d_server(NULL)
++WebServer::WebServer(const string &listenaddress, int port) : d_server(NULL)
+ {
+   d_listenaddress=listenaddress;
+   d_port=port;
+-  d_password=password;
+ }
+ 
+ void WebServer::bind()
+diff --git a/pdns/webserver.hh b/pdns/webserver.hh
+index 5b33767..bac4a88 100644
+--- a/pdns/webserver.hh
++++ b/pdns/webserver.hh
+@@ -32,6 +32,8 @@
+ #include "namespaces.hh"
+ #include "sstuff.hh"
+ 
++class WebServer;
++
+ class HttpRequest : public YaHTTP::Request {
+ public:
+   HttpRequest() : YaHTTP::Request(), accept_json(false), accept_html(false), complete(false) { };
+@@ -40,6 +42,10 @@ public:
+   bool accept_html;
+   bool complete;
+   void json(rapidjson::Document& document);
++
++  // checks password _only_.
++  bool compareAuthorization(const string &expected_password);
++  bool compareHeader(const string &header_name, const string &expected_value);
+ };
+ 
+ class HttpResponse: public YaHTTP::Response {
+@@ -125,7 +131,7 @@ protected:
+ class WebServer : public boost::noncopyable
+ {
+ public:
+-  WebServer(const string &listenaddress, int port, const string &password="");
++  WebServer(const string &listenaddress, int port);
+   void bind();
+   void go();
+ 
+@@ -133,12 +139,13 @@ public:
+   HttpResponse handleRequest(HttpRequest request);
+ 
+   typedef boost::function<void(HttpRequest* req, HttpResponse* resp)> HandlerFunction;
+-  void registerHandler(const string& url, HandlerFunction handler);
+   void registerApiHandler(const string& url, HandlerFunction handler);
++  void registerWebHandler(const string& url, HandlerFunction handler);
+ 
+ protected:
+   static char B64Decode1(char cInChar);
+   static int B64Decode(const std::string& strInput, std::string& strOutput);
++  void registerBareHandler(const string& url, HandlerFunction handler);
+ 
+   virtual Server* createServer() {
+     return new Server(d_listenaddress, d_port);
+diff --git a/pdns/ws-auth.cc b/pdns/ws-auth.cc
+index 12c7a5c..69d27a6 100644
+--- a/pdns/ws-auth.cc
++++ b/pdns/ws-auth.cc
+@@ -61,7 +61,7 @@ AuthWebServer::AuthWebServer()
+   d_ws = 0;
+   d_tid = 0;
+   if(arg().mustDo("webserver")) {
+-    d_ws = new WebServer(arg()["webserver-address"], arg().asNum("webserver-port"),arg()["webserver-password"]);
++    d_ws = new WebServer(arg()["webserver-address"], arg().asNum("webserver-port"));
+     d_ws->bind();
+   }
+ }
+@@ -1255,8 +1255,8 @@ void AuthWebServer::webThread()
+       // legacy dispatch
+       d_ws->registerApiHandler("/jsonstat", boost::bind(&AuthWebServer::jsonstat, this, _1, _2));
+     }
+-    d_ws->registerHandler("/style.css", boost::bind(&AuthWebServer::cssfunction, this, _1, _2));
+-    d_ws->registerHandler("/", boost::bind(&AuthWebServer::indexfunction, this, _1, _2));
++    d_ws->registerWebHandler("/style.css", boost::bind(&AuthWebServer::cssfunction, this, _1, _2));
++    d_ws->registerWebHandler("/", boost::bind(&AuthWebServer::indexfunction, this, _1, _2));
+     d_ws->go();
+   }
+   catch(...) {
+diff --git a/pdns/ws-recursor.cc b/pdns/ws-recursor.cc
+index 73c6f57..be8f494 100644
+--- a/pdns/ws-recursor.cc
++++ b/pdns/ws-recursor.cc
+@@ -421,7 +421,7 @@ RecursorWebServer::RecursorWebServer(FDMultiplexer* fdm)
+ {
+   RecursorControlParser rcp; // inits
+ 
+-  d_ws = new AsyncWebServer(fdm, arg()["experimental-webserver-address"], arg().asNum("experimental-webserver-port"), arg()["experimental-webserver-password"]);
++  d_ws = new AsyncWebServer(fdm, arg()["experimental-webserver-address"], arg().asNum("experimental-webserver-port"));
+   d_ws->bind();
+ 
+   // legacy dispatch
+diff --git a/pdns/ws-recursor.hh b/pdns/ws-recursor.hh
+index ffcad30..3f2fc84 100644
+--- a/pdns/ws-recursor.hh
++++ b/pdns/ws-recursor.hh
+@@ -45,8 +45,8 @@ private:
+ class AsyncWebServer : public WebServer
+ {
+ public:
+-  AsyncWebServer(FDMultiplexer* fdm, const string &listenaddress, int port, const string &password="") :
+-    WebServer(listenaddress, port, password), d_fdm(fdm) { };
++  AsyncWebServer(FDMultiplexer* fdm, const string &listenaddress, int port) :
++    WebServer(listenaddress, port), d_fdm(fdm) { };
+   void go();
+ 
+ private:
+-- 
+2.1.1
+
