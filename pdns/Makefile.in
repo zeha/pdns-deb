@@ -326,11 +326,12 @@ am__pdns_server_SOURCES_DIST = dnspacket.cc nameserver.cc \
 	utility.hh iputils.hh common_startup.hh unix_semaphore.cc \
 	bind-dnssec.schema.sqlite3.sql.h bindparser.cc bindlexer.c \
 	backends/gsql/gsqlbackend.cc backends/gsql/gsqlbackend.hh \
-	backends/gsql/ssql.hh base64.cc sillyrecords.cc base64.hh \
-	zoneparser-tng.cc dnsrecords.cc dnswriter.cc rcpgenerator.cc \
-	dnsparser.cc dns_random.hh dns_random.cc randomhelper.cc \
-	namespaces.hh nsecrecords.cc base32.cc dbdnsseckeeper.cc \
-	dnssecinfra.cc dnsseckeeper.hh dnssecinfra.hh base32.hh dns.cc \
+	backends/gsql/ssql.hh base64.cc sillyrecords.cc \
+	secpoll-auth.cc secpoll-auth.hh base64.hh zoneparser-tng.cc \
+	dnsrecords.cc dnswriter.cc rcpgenerator.cc dnsparser.cc \
+	dns_random.hh dns_random.cc randomhelper.cc namespaces.hh \
+	nsecrecords.cc base32.cc dbdnsseckeeper.cc dnssecinfra.cc \
+	dnsseckeeper.hh dnssecinfra.hh base32.hh dns.cc \
 	dnssecsigner.cc polarrsakeyinfra.cc sha.hh md5.hh \
 	signingpipe.cc signingpipe.hh dnslabeltext.cc lua-pdns.cc \
 	lua-auth.cc lua-auth.hh serialtweaker.cc ednssubnet.cc \
@@ -357,7 +358,7 @@ am_pdns_server_OBJECTS = dnspacket.$(OBJEXT) nameserver.$(OBJEXT) \
 	unix_utility.$(OBJEXT) common_startup.$(OBJEXT) \
 	unix_semaphore.$(OBJEXT) bindparser.$(OBJEXT) \
 	bindlexer.$(OBJEXT) backends/gsql/gsqlbackend.$(OBJEXT) \
-	base64.$(OBJEXT) sillyrecords.$(OBJEXT) \
+	base64.$(OBJEXT) sillyrecords.$(OBJEXT) secpoll-auth.$(OBJEXT) \
 	zoneparser-tng.$(OBJEXT) dnsrecords.$(OBJEXT) \
 	dnswriter.$(OBJEXT) rcpgenerator.$(OBJEXT) dnsparser.$(OBJEXT) \
 	dns_random.$(OBJEXT) randomhelper.$(OBJEXT) \
@@ -961,18 +962,18 @@ pdns_server_SOURCES = dnspacket.cc nameserver.cc tcpreceiver.hh \
 	unix_semaphore.cc bind-dnssec.schema.sqlite3.sql.h \
 	bindparser.cc bindlexer.c backends/gsql/gsqlbackend.cc \
 	backends/gsql/gsqlbackend.hh backends/gsql/ssql.hh base64.cc \
-	sillyrecords.cc base64.hh zoneparser-tng.cc dnsrecords.cc \
-	dnswriter.cc rcpgenerator.cc dnsparser.cc dns_random.hh \
-	dns_random.cc randomhelper.cc namespaces.hh nsecrecords.cc \
-	base32.cc dbdnsseckeeper.cc dnssecinfra.cc dnsseckeeper.hh \
-	dnssecinfra.hh base32.hh dns.cc dnssecsigner.cc \
-	polarrsakeyinfra.cc sha.hh md5.hh signingpipe.cc \
-	signingpipe.hh dnslabeltext.cc lua-pdns.cc lua-auth.cc \
-	lua-auth.hh serialtweaker.cc ednssubnet.cc ednssubnet.hh \
-	cachecleaner.hh json.cc json.hh version.hh version.cc \
-	rfc2136handler.cc responsestats.cc responsestats.hh comment.hh \
-	auth-carbon.cc $(am__append_5) $(am__append_7) $(am__append_9) \
-	$(am__append_11) $(am__append_13)
+	sillyrecords.cc secpoll-auth.cc secpoll-auth.hh base64.hh \
+	zoneparser-tng.cc dnsrecords.cc dnswriter.cc rcpgenerator.cc \
+	dnsparser.cc dns_random.hh dns_random.cc randomhelper.cc \
+	namespaces.hh nsecrecords.cc base32.cc dbdnsseckeeper.cc \
+	dnssecinfra.cc dnsseckeeper.hh dnssecinfra.hh base32.hh dns.cc \
+	dnssecsigner.cc polarrsakeyinfra.cc sha.hh md5.hh \
+	signingpipe.cc signingpipe.hh dnslabeltext.cc lua-pdns.cc \
+	lua-auth.cc lua-auth.hh serialtweaker.cc ednssubnet.cc \
+	ednssubnet.hh cachecleaner.hh json.cc json.hh version.hh \
+	version.cc rfc2136handler.cc responsestats.cc responsestats.hh \
+	comment.hh auth-carbon.cc $(am__append_5) $(am__append_7) \
+	$(am__append_9) $(am__append_11) $(am__append_13)
 pdns_server_LDFLAGS = @moduleobjects@ @modulelibs@ $(DYNLINKFLAGS) @LIBDL@ $(THREADFLAGS)  $(BOOST_SERIALIZATION_LDFLAGS) -rdynamic
 pdns_server_LDADD = $(POLARSSL_LIBS) $(BOOST_SERIALIZATION_LIBS) \
 	$(LUA_LIBS) $(SQLITE3_LIBS) $(YAHTTP_LIBS) $(am__append_6) \
@@ -1498,6 +1499,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rfc2136handler.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/saxfr.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sdig.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/secpoll-auth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/selectmplexer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/serialtweaker.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/signingpipe.Po@am__quote@
