@@ -1,3 +1,18 @@
+pdns (3.4.1-1) unstable; urgency=medium
+
+  * Imported Upstream version 3.4.1, a bug fix release, that:
+    * Fixes slaving of DNSSEC-signed zones to NSD or BIND.
+    * Fixes pdnssec increase-serial to not break SOA records
+      in DNSSEC zones.
+    * Adds security status polling. (We set the package vendor
+      and version for this.)
+  * Remove patch 0001-API-Replace-HTTP-Basic-auth-with-static-key-in-custom,
+    which has been applied upstream.
+  * Resync pdns.conf with upstream
+  * Update debian/watch file, as upstream has changed to bz2 files.
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Sat, 01 Nov 2014 23:08:08 +0100
+
 pdns (3.4.0-2) unstable; urgency=medium
 
   * Apply patch from upstream switching API auth to a static key.
