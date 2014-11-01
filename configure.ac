@@ -1,7 +1,7 @@
 AC_PREREQ([2.61])
 
 dnl The following lines may be patched by set-version-auth.
-AC_INIT([pdns], [3.4.0])
+AC_INIT([pdns], [3.4.1])
 AC_SUBST([DIST_HOST], [jenkins@autotest.powerdns.com])
 dnl End patch area.
 
