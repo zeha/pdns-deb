@@ -1,5 +1,9 @@
 #!/usr/bin/make -f
 
+# Vendor and version
+version := $(shell dpkg-parsechangelog -S Version).$(shell dpkg-vendor --query Vendor)
+CXXFLAGS += -DPACKAGEVERSION='"$(version)"'
+
 # Backends
 backends := bind ldap pipe gmysql gpgsql gsqlite3 geo lua lmdb mydns remote
 
