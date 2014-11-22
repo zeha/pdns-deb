@@ -1,2 +1,2 @@
 SUBDIRS=@moduledirs@
-DIST_SUBDIRS=db2backend geobackend gmysqlbackend godbcbackend goraclebackend gpgsqlbackend gsqlite3backend ldapbackend luabackend mydnsbackend opendbxbackend oraclebackend pipebackend xdbbackend tinydnsbackend remotebackend randombackend
+DIST_SUBDIRS=bindbackend db2backend geobackend gmysqlbackend goraclebackend gpgsqlbackend gsqlite3backend ldapbackend luabackend mydnsbackend opendbxbackend oraclebackend pipebackend tinydnsbackend remotebackend randombackend lmdbbackend geoipbackend

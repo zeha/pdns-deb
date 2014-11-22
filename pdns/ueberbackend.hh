@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,7 +29,6 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-#ifndef WIN32
 #include <sys/un.h>
 #include <dlfcn.h>
 #include <unistd.h>
@@ -35,7 +37,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#endif // WIN32
 #include <boost/utility.hpp>
 #include "dnspacket.hh"
 #include "dnsbackend.hh"
@@ -58,7 +59,7 @@ public:
   ~UeberBackend();
   typedef DNSBackend *BackendMaker(); //!< typedef for functions returning pointers to new backends
 
-  bool superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *account, DNSBackend **db);
+  bool superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *nameserver, string *account, DNSBackend **db);
 
   /** contains BackendReporter objects, which contain maker functions and information about
       weather a module has already been reported to existing instances of the UeberBackend
@@ -112,10 +113,16 @@ public:
 
   void lookup(const QType &, const string &qdomain, DNSPacket *pkt_p=0,  int zoneId=-1);
 
+  /* 5-arg version is only valid for backends and should never be called directly */
+  virtual bool getAuth(DNSPacket *p, SOAData *sd, const string &target, int *zoneId, const int best_match_len) {
+    throw PDNSException("5-arg version of getAuth should not be called in UeberBackend");
+  }
+
+  bool getAuth(DNSPacket *p, SOAData *sd, const string &target, int *zoneId);
   bool getSOA(const string &domain, SOAData &sd, DNSPacket *p=0);
-  bool list(const string &target, int domain_id);
+  bool list(const string &target, int domain_id, bool include_disabled=false);
   bool get(DNSResourceRecord &r);
-  void getAllDomains(vector<DomainInfo> *domains);
+  void getAllDomains(vector<DomainInfo> *domains, bool include_disabled=false);
 
   static DNSBackend *maker(const map<string,string> &);
   static void closeDynListener();
@@ -123,9 +130,11 @@ public:
   void getUnfreshSlaveInfos(vector<DomainInfo>* domains);
   void getUpdatedMasters(vector<DomainInfo>* domains);
   bool getDomainInfo(const string &domain, DomainInfo &di);
+  bool createDomain(const string &domain);
   
   int addDomainKey(const string& name, const KeyData& key);
   bool getDomainKeys(const string& name, unsigned int kind, std::vector<KeyData>& keys);
+  bool getAllDomainMetadata(const string& name, std::map<std::string, std::vector<std::string> >& meta);
   bool getDomainMetadata(const string& name, const std::string& kind, std::vector<std::string>& meta);
   bool setDomainMetadata(const string& name, const std::string& kind, const std::vector<std::string>& meta);
 
@@ -133,12 +142,20 @@ public:
   bool activateDomainKey(const string& name, unsigned int id);
   bool deactivateDomainKey(const string& name, unsigned int id);
 
+  bool getDirectNSECx(uint32_t id, const string &hashed, const QType &qtype, string &before, DNSResourceRecord &rr);
+  bool getDirectRRSIGs(const string &signer, const string &qname, const QType &qtype, vector<DNSResourceRecord> &rrsigs);
+
   bool getTSIGKey(const string& name, string* algorithm, string* content);
-  
+  bool setTSIGKey(const string& name, const string& algorithm, const string& content);
+  bool deleteTSIGKey(const string& name);
+  bool getTSIGKeys(std::vector< struct TSIGKey > &keys);
+
   void alsoNotifies(const string &domain, set<string> *ips); 
   void rediscover(string* status=0);
   void reload();
 private:
+  unsigned int d_cache_ttl, d_negcache_ttl;
+
   DNSResourceRecord lastrr;
   pthread_t tid;
   handle d_handle;

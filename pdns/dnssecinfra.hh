@@ -1,5 +1,6 @@
 #ifndef PDNS_DNSSECINFRA_HH
 #define PDNS_DNSSECINFRA_HH
+
 #include "dnsrecords.hh"
 #include <boost/shared_ptr.hpp>
 #include <string>
@@ -28,7 +29,7 @@ class DNSCryptoKeyEngine
     virtual std::string getPubKeyHash()const =0;
     virtual std::string getPublicKeyString()const =0;
     virtual int getBits() const =0;
-    
+ 
     virtual void fromISCMap(DNSKEYRecordContent& drc, stormap_t& stormap)=0;
     virtual void fromPEMString(DNSKEYRecordContent& drc, const std::string& raw)
     {
@@ -128,8 +129,14 @@ void decodeDERIntegerSequence(const std::string& input, vector<string>& output);
 class DNSPacket;
 void addRRSigs(DNSSECKeeper& dk, DNSBackend& db, const std::set<string, CIStringCompare>& authMap, vector<DNSResourceRecord>& rrs);
 
-string calculateMD5HMAC(const std::string& key_, const std::string& text);
+typedef enum { TSIG_MD5, TSIG_SHA1, TSIG_SHA224, TSIG_SHA256, TSIG_SHA384, TSIG_SHA512 } TSIGHashEnum;
+
+string calculateMD5HMAC(const std::string& key, const std::string& text);
+string calculateSHAHMAC(const std::string& key, const std::string& text, TSIGHashEnum hash);
+string calculateHMAC(const std::string& key, const std::string& text, TSIGHashEnum hash);
+
 string makeTSIGMessageFromTSIGPacket(const string& opacket, unsigned int tsigoffset, const string& keyname, const TSIGRecordContent& trc, const string& previous, bool timersonly, unsigned int dnsHeaderOffset=0);
+bool getTSIGHashEnum(const string &algoName, TSIGHashEnum& algoEnum);
 void addTSIG(DNSPacketWriter& pw, TSIGRecordContent* trc, const string& tsigkeyname, const string& tsigsecret, const string& tsigprevious, bool timersonly);
 
 #endif

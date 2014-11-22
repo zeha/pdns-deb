@@ -4,6 +4,7 @@ usr/bin/pdnssec
 usr/bin/dnswasher
 usr/bin/dnsreplay
 usr/bin/dnsscope
+usr/lib/*/pdns/libbindbackend.so*
 usr/sbin/pdns_server
 debian/config/pdns.conf usr/share/pdns-server/
 debian/config/pdns.local.conf usr/share/pdns-server/

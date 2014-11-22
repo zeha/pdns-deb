@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -20,13 +23,9 @@
 #define PDNS_DNSPROXY
 #include <pthread.h>
 #include <map>
-
-#ifndef WIN32
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <arpa/inet.h>
-#endif // WIN32
-
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "dnspacket.hh"
 #include "lock.hh"
 #include "iputils.hh"
@@ -81,6 +80,7 @@ private:
     time_t created;
     string qname;
     uint16_t qtype;
+    boost::optional<ComboAddress> anyLocal;
   };
 
   typedef map<int,ConntrackEntry> map_t;

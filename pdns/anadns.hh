@@ -6,7 +6,7 @@
 #include <netinet/ip.h>
 #include <netinet/udp.h>
 #include "dnsparser.hh"
-
+#include "iputils.hh"
 #include "namespaces.hh"
 #include "namespaces.hh"
 
@@ -18,33 +18,22 @@ struct QuestionIdentifier
   bool operator<(const QuestionIdentifier& rhs) const
   {
     return 
-      tie(d_sourceip, d_destip, d_sourceport, d_destport, d_qname, d_qtype, d_id) < 
-      tie(rhs.d_sourceip, rhs.d_destip, rhs.d_sourceport, rhs.d_destport, rhs.d_qname, rhs.d_qtype, rhs.d_id);
+      tie(d_source, d_dest, d_qname, d_qtype, d_id) < 
+      tie(rhs.d_source, rhs.d_dest, rhs.d_qname, rhs.d_qtype, rhs.d_id);
   }
 
   // the canonical direction is that of the question
-  static QuestionIdentifier create(const struct ip* ip, const struct udphdr* udp, const MOADNSParser& mdp)
+  static QuestionIdentifier create(const ComboAddress& src, const ComboAddress& dst, const MOADNSParser& mdp)
   {
     QuestionIdentifier ret;
+
     if(mdp.d_header.qr) {
-      memcpy(&ret.d_sourceip, &ip->ip_dst, sizeof(ret.d_sourceip));
-      ret.d_sourceip=htonl(ret.d_sourceip);
-
-      memcpy(&ret.d_destip, &ip->ip_src, sizeof(ret.d_destip));
-      ret.d_destip=htonl(ret.d_destip);
-
-      ret.d_sourceport=htons(udp->uh_dport);
-      ret.d_destport=htons(udp->uh_sport);
+      ret.d_source = dst;
+      ret.d_dest = src;
     }
     else {
-      memcpy(&ret.d_sourceip, &ip->ip_src, sizeof(ret.d_sourceip));
-      ret.d_sourceip=htonl(ret.d_sourceip);
-
-      memcpy(&ret.d_destip, &ip->ip_dst, sizeof(ret.d_destip));
-      ret.d_destip=htonl(ret.d_destip);
-
-      ret.d_sourceport=htons(udp->uh_sport);
-      ret.d_destport=htons(udp->uh_dport);
+      ret.d_source = src;
+      ret.d_dest = dst;
     }
     ret.d_qname=mdp.d_qname;
     ret.d_qtype=mdp.d_qtype;
@@ -52,10 +41,7 @@ struct QuestionIdentifier
     return ret;
   }
 
-  uint32_t d_sourceip;
-  uint32_t d_destip;
-  uint16_t d_sourceport;
-  uint16_t d_destport;
+  ComboAddress d_source, d_dest;
 
   string d_qname;
   uint16_t d_qtype;
@@ -64,22 +50,10 @@ struct QuestionIdentifier
 
 inline ostream& operator<<(ostream &s, const QuestionIdentifier& qi) 
 {
-  s<< "'"<<qi.d_qname<<"|"<<DNSRecordContent::NumberToType(qi.d_qtype)<<"', with id " << qi.d_id <<" from ";
-  uint32_t rint=qi.d_sourceip;
-
-  s<< (rint>>24 & 0xff)<<".";
-  s<< (rint>>16 & 0xff)<<".";
-  s<< (rint>>8  & 0xff)<<".";
-  s<< (rint     & 0xff);
-  s<<":"<<qi.d_sourceport;
+  s<< "'"<<qi.d_qname<<"|"<<DNSRecordContent::NumberToType(qi.d_qtype)<<"', with id " << qi.d_id <<" from "<<qi.d_source.toStringWithPort();
   
-  s<<" to ";
-  rint=qi.d_destip;
-  s<< (rint>>24 & 0xff)<<".";
-  s<< (rint>>16 & 0xff)<<".";
-  s<< (rint>>8  & 0xff)<<".";
-  s<< (rint     & 0xff);
-  return s<<":"<<qi.d_destport;
+  s<<" to " << qi.d_dest.toStringWithPort();
+  return s;
 }
 
 

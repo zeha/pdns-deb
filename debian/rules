@@ -1,7 +1,11 @@
 #!/usr/bin/make -f
 
+# Vendor and version
+version := $(shell dpkg-parsechangelog -SVersion).$(shell dpkg-vendor --query Vendor)
+CXXFLAGS += -DPACKAGEVERSION='"$(version)"'
+
 # Backends
-backends := ldap pipe gmysql gpgsql gsqlite3 geo lua
+backends := bind ldap pipe gmysql gpgsql gsqlite3 geo lua lmdb mydns remote
 
 DEB_HOST_MULTIARCH  ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
@@ -10,6 +14,7 @@ DEB_HOST_MULTIARCH  ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 	dh $@ --with autoreconf --parallel
 
 override_dh_auto_configure:
+	mv pdns/dnslabeltext.cc debian/dnslabeltext.cc.moved
 	./configure \
 		--host=$(DEB_HOST_GNU_TYPE) \
 		--build=$(DEB_BUILD_GNU_TYPE) \
@@ -21,6 +26,7 @@ override_dh_auto_configure:
 		--libexecdir='$${prefix}/lib' \
 		--with-dynmodules="$(backends)" \
 		--with-modules="" \
+		--with-system-polarssl \
 		--with-pgsql-includes=`pg_config --includedir` \
 		--enable-cryptopp \
 		--enable-botan1.10 \
@@ -38,13 +44,20 @@ override_dh_fixperms:
 
 # init script needs to be named pdns, not pdns-server
 override_dh_installinit:
+	dh_systemd_enable --name=pdns
 	dh_installinit --name=pdns
+	dh_systemd_start --restart-after-upgrade
 
 # Verbose build (shows used compiler/linker and their flags)
 override_dh_auto_build-arch:
 	dh_auto_build -- V=1
 
-# we need to zap generated files
-override_dh_auto_clean:
-	dh_auto_clean
-	rm -f pdns/backends/bind/dnslabeltext.cc
+# Verbose tests (shows used compiler/linker and their flags)
+override_dh_auto_test:
+	echo Skipping make test, as dependencies are missing.
+	#dh_auto_test -- V=1
+
+# restore moved files
+override_dh_clean:
+	test -f debian/dnslabeltext.cc.moved && mv debian/dnslabeltext.cc.moved pdns/dnslabeltext.cc || true
+	dh_clean

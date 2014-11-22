@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -63,8 +67,6 @@ bool DNSSECKeeper::isSecuredZone(const std::string& zone)
       else
         return true;
     }
-    else
-      ; 
   }  
   keyset_t keys = getKeys(zone, true); // does the cache
   
@@ -94,7 +96,7 @@ bool DNSSECKeeper::addKey(const std::string& name, bool keyOrZone, int algorithm
       else if(algorithm == 14)
         bits = 384;
       else {
-        throw runtime_error("Can't guess key size for algoritm "+lexical_cast<string>(algorithm));
+        throw runtime_error("Can't guess key size for algorithm "+lexical_cast<string>(algorithm));
       }
     }
   }
@@ -231,11 +233,16 @@ bool DNSSECKeeper::getNSEC3PARAM(const std::string& zname, NSEC3PARAMRecordConte
   if(value.empty()) { // "no NSEC3"
     return false;
   }
-     
+
+  static int maxNSEC3Iterations=::arg().asNum("max-nsec3-iterations");
   if(ns3p) {
     NSEC3PARAMRecordContent* tmp=dynamic_cast<NSEC3PARAMRecordContent*>(DNSRecordContent::mastermake(QType::NSEC3PARAM, 1, value));
     *ns3p = *tmp;
     delete tmp;
+    if (ns3p->d_iterations > maxNSEC3Iterations) {
+      ns3p->d_iterations = maxNSEC3Iterations;
+      L<<Logger::Error<<"Number of NSEC3 iterations for zone '"<<zname<<"' is above 'max-nsec3-iterations'. Value adjusted to: "<<maxNSEC3Iterations<<endl;
+    }
   }
   if(narrow) {
     getFromMeta(zname, "NSEC3NARROW", value);
@@ -246,6 +253,10 @@ bool DNSSECKeeper::getNSEC3PARAM(const std::string& zname, NSEC3PARAMRecordConte
 
 bool DNSSECKeeper::setNSEC3PARAM(const std::string& zname, const NSEC3PARAMRecordContent& ns3p, const bool& narrow)
 {
+  static int maxNSEC3Iterations=::arg().asNum("max-nsec3-iterations");
+  if (ns3p.d_iterations > maxNSEC3Iterations)
+    throw runtime_error("Can't set NSEC3PARAM for zone '"+zname+"': number of NSEC3 iterations is above 'max-nsec3-iterations'");
+
   clearCaches(zname);
   string descr = ns3p.getZoneRepresentation();
   vector<string> meta;
@@ -353,37 +364,49 @@ bool DNSSECKeeper::secureZone(const std::string& name, int algorithm, int size)
   return addKey(name, true, algorithm, size);
 }
 
-bool DNSSECKeeper::getPreRRSIGs(DNSBackend& db, const std::string& signer, const std::string& qname, 
-	const std::string& wildcardname, const QType& qtype, 
-	DNSPacketWriter::Place signPlace, vector<DNSResourceRecord>& rrsigs, uint32_t signTTL)
+bool DNSSECKeeper::getPreRRSIGs(DNSBackend& db, const std::string& signer, const std::string& qname,
+        const std::string& wildcardname, const QType& qtype,
+        DNSPacketWriter::Place signPlace, vector<DNSResourceRecord>& rrsigs, uint32_t signTTL)
 {
+  vector<DNSResourceRecord> sigs;
+  if(db.getDirectRRSIGs(toLower(signer), toLower(wildcardname.empty() ? qname : wildcardname), qtype, sigs)) {
+    BOOST_FOREACH(DNSResourceRecord &rr, sigs) {
+      if (!wildcardname.empty())
+        rr.qname = toLower(qname);
+      rr.d_place = (DNSResourceRecord::Place)signPlace;
+      rr.ttl = signTTL;
+      rrsigs.push_back(rr);
+    }
+    return true;
+  }
+
   // cerr<<"Doing DB lookup for precomputed RRSIGs for '"<<(wildcardname.empty() ? qname : wildcardname)<<"'"<<endl;
-	SOAData sd;
-	sd.db=(DNSBackend *)-1; // force uncached answer
-	if(!db.getSOA(signer, sd)) {
-		DLOG(L<<"Could not get SOA for domain"<<endl);
-		return false;
-	}
-	db.lookup(QType(QType::RRSIG), wildcardname.empty() ? qname : wildcardname, NULL, sd.domain_id);
-	DNSResourceRecord rr;
-	while(db.get(rr)) { 
-		// cerr<<"Considering for '"<<qtype.getName()<<"' RRSIG '"<<rr.content<<"'\n";
-		vector<string> parts;
-		stringtok(parts, rr.content);
-		if(parts[0] == qtype.getName() && pdns_iequals(parts[7], signer+".")) {
-			// cerr<<"Got it"<<endl;
-			if (!wildcardname.empty())
-				rr.qname = qname;
-			rr.d_place = (DNSResourceRecord::Place)signPlace;
-			rr.ttl = signTTL;
-			rrsigs.push_back(rr);
-		}
-		else ; // cerr<<"Skipping!"<<endl;
-	}
-	return true;
+        SOAData sd;
+        sd.db=(DNSBackend *)-1; // force uncached answer
+        if(!db.getSOA(signer, sd)) {
+                DLOG(L<<"Could not get SOA for domain"<<endl);
+                return false;
+        }
+        db.lookup(QType(QType::RRSIG), wildcardname.empty() ? qname : wildcardname, NULL, sd.domain_id);
+        DNSResourceRecord rr;
+        while(db.get(rr)) { 
+                // cerr<<"Considering for '"<<qtype.getName()<<"' RRSIG '"<<rr.content<<"'\n";
+                vector<string> parts;
+                stringtok(parts, rr.content);
+                if(parts[0] == qtype.getName() && pdns_iequals(parts[7], signer+".")) {
+                        // cerr<<"Got it"<<endl;
+                        if (!wildcardname.empty())
+                                rr.qname = qname;
+                        rr.d_place = (DNSResourceRecord::Place)signPlace;
+                        rr.ttl = signTTL;
+                        rrsigs.push_back(rr);
+                }
+                // else cerr<<"Skipping!"<<endl;
+        }
+        return true;
 }
 
-bool DNSSECKeeper::TSIGGrantsAccess(const string& zone, const string& keyname, const string& algorithm)
+bool DNSSECKeeper::TSIGGrantsAccess(const string& zone, const string& keyname)
 {
   vector<string> allowed;
   

@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation; 
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -28,7 +32,6 @@
 #include "logger.hh"
 #include "dns.hh"
 #include "arguments.hh"
-#include "session.hh"
 #include "packetcache.hh"
 #include <boost/lexical_cast.hpp>
 
@@ -43,7 +46,7 @@ void CommunicatorClass::retrievalLoopThread(void)
       Lock l(&d_lock);
       if(d_suckdomains.empty()) 
         continue;
-	
+        
       sr=d_suckdomains.front();
       d_suckdomains.pop_front();
     }
@@ -55,18 +58,37 @@ void CommunicatorClass::go()
 {
   pthread_t tid;
   pthread_create(&tid,0,&launchhelper,this); // Starts CommunicatorClass::mainloop()
-  for(int n=0; n < ::arg().asNum("retrieval-threads"); ++n)
+  for(int n=0; n < ::arg().asNum("retrieval-threads", 1); ++n)
     pthread_create(&tid, 0, &retrieveLaunchhelper, this); // Starts CommunicatorClass::retrievalLoopThread()
 
-  d_preventSelfNotification =::arg().mustDo("prevent-self-notification");
+  d_preventSelfNotification = ::arg().mustDo("prevent-self-notification");
+
+  try {
+    d_onlyNotify.toMasks(::arg()["only-notify"]);
+  }
+  catch(PDNSException &e) {
+    L<<Logger::Error<<"Unparseable IP in only-notify. Error: "<<e.reason<<endl;
+    exit(0);
+  }
+
+  vector<string> parts;
+  stringtok(parts, ::arg()["also-notify"], ", \t");
+  for (vector<string>::const_iterator iter = parts.begin(); iter != parts.end(); ++iter) {
+    try {
+      ComboAddress caIp(*iter, 53);
+      d_alsoNotify.insert(caIp.toStringWithPort());
+    }
+    catch(PDNSException &e) {
+      L<<Logger::Error<<"Unparseable IP in also-notify. Error: "<<e.reason<<endl;
+      exit(0);
+    }
+  }
 }
 
 void CommunicatorClass::mainloop(void)
 {
   try {
-#ifndef WIN32
     signal(SIGPIPE,SIG_IGN);
-#endif // WIN32
     L<<Logger::Error<<"Master/slave communicator launching"<<endl;
     PacketHandler P;
     d_tickinterval=::arg().asNum("slave-cycle-interval");
@@ -97,7 +119,7 @@ void CommunicatorClass::mainloop(void)
       }
     }
   }
-  catch(AhuException &ae) {
+  catch(PDNSException &ae) {
     L<<Logger::Error<<"Exiting because communicator thread died with error: "<<ae.reason<<endl;
     Utility::sleep(1);
     exit(0);

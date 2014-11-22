@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,18 +29,15 @@
 #include <vector>
 #include <boost/shared_ptr.hpp>
 #include <poll.h>
-
-#ifndef WIN32
-# include <sys/select.h>
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <arpa/inet.h>
-# include <sys/stat.h>
-# include <unistd.h>
-# include <netdb.h>
-# include <sys/uio.h>
-# include <sys/select.h>
-#endif // WIN32
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <sys/uio.h>
+#include <sys/select.h>
 
 #include "namespaces.hh"
 
@@ -53,6 +53,7 @@ private:
   static int readLength(int fd, ComboAddress *remote);
   static void getQuestion(int fd, char *mesg, int pktlen, const ComboAddress& remote);
   static int doAXFR(const string &target, boost::shared_ptr<DNSPacket> q, int outsock);
+  static int doIXFR(boost::shared_ptr<DNSPacket> q, int outsock);
   static bool canDoAXFR(boost::shared_ptr<DNSPacket> q);
   static void *doConnection(void *data);
   static void *launcher(void *data);

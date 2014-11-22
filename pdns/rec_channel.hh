@@ -3,18 +3,9 @@
 #include <string>
 #include <map>
 #include <inttypes.h>
-#if !defined SOLARIS8 && !defined WIN32
-
-#elif defined WIN32
-#include "utility.hh"
-#endif
-
-#ifndef WIN32
 #include <sys/un.h>
-#else
-// ?
-struct sockaddr_un {};
-#endif
+#include <pthread.h>
+
 
 /** this class is used both to send and answer channel commands to the PowerDNS Recursor */
 class RecursorControlChannel
@@ -44,8 +35,10 @@ public:
   static void nop(void){}
   typedef void func_t(void);
   std::string getAnswer(const std::string& question, func_t** func);
+private:
+  static bool s_init;
 };
 
 std::map<std::string, std::string> getAllStatsMap();
-
+extern pthread_mutex_t g_carbon_config_lock;
 #endif 

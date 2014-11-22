@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -57,7 +60,9 @@ struct SOAData
 class RCode
 {
 public:
-  enum rcodes_ { NoError=0, FormErr=1, ServFail=2, NXDomain=3, NotImp=4, Refused=5, NotAuth=9 };
+  enum rcodes_ { NoError=0, FormErr=1, ServFail=2, NXDomain=3, NotImp=4, Refused=5, YXDomain=6, YXRRSet=7, NXRRSet=8, NotAuth=9, NotZone=10};
+  static std::string to_s(unsigned short rcode);
+  static std::vector<std::string> rcodes_s;
 };
 
 class Opcode
@@ -70,8 +75,12 @@ public:
 class DNSResourceRecord
 {
 public:
-  DNSResourceRecord() : qclass(1), priority(0), signttl(0), last_modified(0), d_place(ANSWER), auth(1), scopeMask(0) {};
+  DNSResourceRecord() : qclass(1), priority(0), signttl(0), last_modified(0), d_place(ANSWER), auth(1), disabled(0), scopeMask(0) {};
+  DNSResourceRecord(const struct DNSRecord&);
   ~DNSResourceRecord(){};
+
+  void setContent(const string& content);
+  string getZoneRepresentation() const;
 
   // data
   
@@ -89,6 +98,7 @@ public:
   Place d_place; //!< This specifies where a record goes within the packet
 
   bool auth;
+  bool disabled;
   uint8_t scopeMask;
 
   template<class Archive>
@@ -105,7 +115,10 @@ public:
     ar & last_modified;
     ar & d_place;
     ar & auth;
+    ar & disabled;
   }
+
+  bool operator==(const DNSResourceRecord& rhs);
 
   bool operator<(const DNSResourceRecord &b) const
   {
@@ -117,13 +130,8 @@ public:
   }
 };
 
-#ifdef _MSC_VER
-# pragma pack ( push )
-# pragma pack ( 1 )
-# define GCCPACKATTRIBUTE
-#else
-# define GCCPACKATTRIBUTE __attribute__((packed))
-#endif
+#define GCCPACKATTRIBUTE __attribute__((packed))
+
 struct dnsrecordheader
 {
   uint16_t d_type;
@@ -137,9 +145,6 @@ struct EDNS0Record
         uint8_t extRCode, version; 
         uint16_t Z; 
 } GCCPACKATTRIBUTE;
-#ifdef _MSC_VER
-#pragma pack (pop)
-#endif 
 
 enum  {
         ns_t_invalid = 0,       /* Cookie. */
@@ -202,12 +207,9 @@ enum  {
         ns_t_any = 255,         /* Wildcard match. */
 };
 
-#ifdef WIN32
-#define BYTE_ORDER 1
-#define LITTLE_ENDIAN 1
-#elif __FreeBSD__ || __APPLE__ || __OpenBSD__
+#if __FreeBSD__ || __APPLE__ || __OpenBSD__ ||  defined(__FreeBSD_kernel__)
 #include <machine/endian.h>
-#elif __linux__
+#elif __linux__ || __GNU__
 # include <endian.h>
 
 #else  // with thanks to <arpa/nameser.h> 
@@ -246,7 +248,7 @@ struct dnsheader {
                         /* fields in third byte */
         unsigned        qr: 1;          /* response flag */
         unsigned        opcode: 4;      /* purpose of message */
-        unsigned        aa: 1;          /* authoritive answer */
+        unsigned        aa: 1;          /* authoritative answer */
         unsigned        tc: 1;          /* truncated message */
         unsigned        rd: 1;          /* recursion desired */
                         /* fields in fourth byte */
@@ -255,12 +257,11 @@ struct dnsheader {
         unsigned        ad: 1;          /* authentic data from named */
         unsigned        cd: 1;          /* checking disabled by resolver */
         unsigned        rcode :4;       /* response code */
-#endif
-#if BYTE_ORDER == LITTLE_ENDIAN || BYTE_ORDER == PDP_ENDIAN
+#elif BYTE_ORDER == LITTLE_ENDIAN || BYTE_ORDER == PDP_ENDIAN
                         /* fields in third byte */
         unsigned        rd :1;          /* recursion desired */
         unsigned        tc :1;          /* truncated message */
-        unsigned        aa :1;          /* authoritive answer */
+        unsigned        aa :1;          /* authoritative answer */
         unsigned        opcode :4;      /* purpose of message */
         unsigned        qr :1;          /* response flag */
                         /* fields in fourth byte */
@@ -281,6 +282,7 @@ struct dnsheader {
 #define L theL()
 extern time_t s_starttime;
 std::string questionExpand(const char* packet, uint16_t len, uint16_t& type);
+uint32_t hashQuestion(const char* packet, uint16_t len, uint32_t init);
 bool dnspacketLessThan(const std::string& a, const std::string& b);
 
 /** helper function for both DNSPacket and addSOARecord() - converts a line into a struct, for easier parsing */

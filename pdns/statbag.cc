@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,7 +22,7 @@
 
 #include "utility.hh"
 #include "statbag.hh"
-#include "ahuexception.hh"
+#include "pdnsexception.hh"
 #include <iostream>
 #include <sstream>
 #include <algorithm>
@@ -42,7 +45,7 @@ void StatBag::exists(const string &key)
   if(!d_stats.count(key))
     {
       unlock(); // it's the details that count
-      throw AhuException("Trying to deposit into unknown StatBag key '"+key+"'");
+      throw PDNSException("Trying to deposit into unknown StatBag key '"+key+"'");
     }
 }
 
@@ -125,19 +128,16 @@ unsigned int StatBag::readZero(const string &key)
 {
   lock();
 
-
   if(!d_stats.count(key))
     {
       unlock();
       return 0;
     }
-
   
   unsigned int tmp=*d_stats[key];
   d_stats[key]=0;
 
   unlock();
-
   return tmp;
 }
 
@@ -299,4 +299,7 @@ vector<string>StatBag::listRings()
   return ret;
 }
 
-
+bool StatBag::ringExists(const string &name)
+{
+  return d_rings.count(name);
+}

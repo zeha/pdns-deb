@@ -16,7 +16,7 @@
 #include <pdns/dnsbackend.hh>
 #include <pdns/dnspacket.hh>
 #include <pdns/ueberbackend.hh>
-#include <pdns/ahuexception.hh>
+#include <pdns/pdnsexception.hh>
 #include <pdns/logger.hh>
 #include <pdns/arguments.hh>
 #include <sys/socket.h>
@@ -32,6 +32,7 @@ CoWrapper::CoWrapper(const string &command, int timeout)
    d_cp=0;
    d_command=command;
    d_timeout=timeout;
+   d_abiVersion = ::arg().asNum("pipebackend-abi-version");
    launch(); // let exceptions fall through - if initial launch fails, we want to die
    // I think
 }
@@ -52,7 +53,7 @@ void CoWrapper::launch()
      d_cp = new UnixRemote(d_command, d_timeout);
    else
      d_cp = new CoProcess(d_command, d_timeout); 
-   d_cp->send("HELO\t"+lexical_cast<string>(::arg().asNum("pipebackend-abi-version")));
+   d_cp->send("HELO\t"+lexical_cast<string>(d_abiVersion));
    string banner;
    d_cp->receive(banner); 
    L<<Logger::Error<<"Backend launched with banner: "<<banner<<endl;
@@ -65,7 +66,7 @@ void CoWrapper::send(const string &line)
       d_cp->send(line);
       return;
    }
-   catch(AhuException &ae) {
+   catch(PDNSException &ae) {
       delete d_cp;
       d_cp=0;
       throw;
@@ -78,7 +79,7 @@ void CoWrapper::receive(string &line)
       d_cp->receive(line);
       return;
    }
-   catch(AhuException &ae) {
+   catch(PDNSException &ae) {
       L<<Logger::Warning<<kBackendId<<" unable to receive data from coprocess. "<<ae.reason<<endl;
       delete d_cp;
       d_cp=0;
@@ -94,6 +95,7 @@ PipeBackend::PipeBackend(const string &suffix)
      d_coproc=shared_ptr<CoWrapper>(new CoWrapper(getArg("command"), getArgAsNum("timeout")));
      d_regex=getArg("regex").empty() ? 0 : new Regex(getArg("regex"));
      d_regexstr=getArg("regex");
+     d_abiVersion = ::arg().asNum("pipebackend-abi-version");
    }
    catch(const ArgException &A) {
       L<<Logger::Error<<kBackendId<<" Fatal argument error: "<<A.reason<<endl;
@@ -122,15 +124,14 @@ void PipeBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt_
             realRemote = pkt_p->getRealRemote();
             remoteIP = pkt_p->getRemote();
          }
-         int abiVersion = ::arg().asNum("pipebackend-abi-version");
          // pipebackend-abi-version = 1
          // type    qname           qclass  qtype   id      remote-ip-address
          query<<"Q\t"<<qname<<"\tIN\t"<<qtype.getName()<<"\t"<<zoneId<<"\t"<<remoteIP;
 
          // add the local-ip-address if pipebackend-abi-version is set to 2
-         if (abiVersion >= 2)
+         if (d_abiVersion >= 2)
             query<<"\t"<<localIP;
-         if(abiVersion >= 3)
+         if(d_abiVersion >= 3)
            query <<"\t"<<realRemote.toString(); 
 
          if(::arg().mustDo("query-logging"))
@@ -138,7 +139,7 @@ void PipeBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt_
          d_coproc->send(query.str());
       }
    }
-   catch(AhuException &ae) {
+   catch(PDNSException &ae) {
       L<<Logger::Error<<kBackendId<<" Error from coprocess: "<<ae.reason<<endl;
       throw; // hop
    }
@@ -146,7 +147,7 @@ void PipeBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt_
    d_qname=qname;
 }
 
-bool PipeBackend::list(const string &target, int inZoneId)
+bool PipeBackend::list(const string &target, int inZoneId, bool include_disabled)
 {
    try {
       d_disavow=false;
@@ -154,12 +155,14 @@ bool PipeBackend::list(const string &target, int inZoneId)
 // The question format:
 
 // type    qname           qclass  qtype   id      ip-address
-
-      query<<"AXFR\t"<<inZoneId;
+      if (d_abiVersion >= 4)
+        query<<"AXFR\t"<<inZoneId<<"\t"<<target;
+      else
+        query<<"AXFR\t"<<inZoneId;
 
       d_coproc->send(query.str());
    }
-   catch(AhuException &ae) {
+   catch(PDNSException &ae) {
       L<<Logger::Error<<kBackendId<<" Error from coprocess: "<<ae.reason<<endl;
       throw;
    }
@@ -193,9 +196,8 @@ bool PipeBackend::get(DNSResourceRecord &r)
 
    // The answer format:
    // DATA    qname           qclass  qtype   ttl     id      content 
-   int abiVersion = ::arg().asNum("pipebackend-abi-version");
    unsigned int extraFields = 0;
-   if(abiVersion == 3)
+   if(d_abiVersion >= 3)
      extraFields = 2;
      
    for(;;) {
@@ -204,7 +206,7 @@ bool PipeBackend::get(DNSResourceRecord &r)
       stringtok(parts,line,"\t");
       if(parts.empty()) {
          L<<Logger::Error<<kBackendId<<" coprocess returned emtpy line in query for "<<d_qname<<endl;
-         throw AhuException("Format error communicating with coprocess");
+         throw PDNSException("Format error communicating with coprocess");
       }
       else if(parts[0]=="FAIL") {
          throw DBException("coprocess returned a FAIL");
@@ -219,11 +221,11 @@ bool PipeBackend::get(DNSResourceRecord &r)
       else if(parts[0]=="DATA") { // yay
          if(parts.size() < 7 + extraFields) {
             L<<Logger::Error<<kBackendId<<" coprocess returned incomplete or empty line in data section for query for "<<d_qname<<endl;
-            throw AhuException("Format error communicating with coprocess in data section");
+            throw PDNSException("Format error communicating with coprocess in data section");
             // now what?
          }
          
-         if(abiVersion == 3) {
+         if(d_abiVersion >= 3) {
            r.scopeMask = atoi(parts[1].c_str());
            r.auth = atoi(parts[2].c_str());
          } else {
@@ -246,7 +248,7 @@ bool PipeBackend::get(DNSResourceRecord &r)
          else {
            if(parts.size()< 8 + extraFields) {
             L<<Logger::Error<<kBackendId<<" coprocess returned incomplete MX/SRV line in data section for query for "<<d_qname<<endl;
-            throw AhuException("Format error communicating with coprocess in data section of MX/SRV record");
+            throw PDNSException("Format error communicating with coprocess in data section of MX/SRV record");
            }
            
            r.priority=atoi(parts[6+extraFields].c_str());
@@ -255,7 +257,7 @@ bool PipeBackend::get(DNSResourceRecord &r)
          break;
       }
       else
-         throw AhuException("Coprocess backend sent incorrect response '"+line+"'");
+         throw PDNSException("Coprocess backend sent incorrect response '"+line+"'");
    }   
    return true;
 }
@@ -288,8 +290,7 @@ class PipeLoader
       PipeLoader()
       {
          BackendMakers().report(new PipeFactory);
-         
-         L<<Logger::Notice<<kBackendId<<" This is the pipebackend version "VERSION" ("__DATE__", "__TIME__") reporting"<<endl;
+         L << Logger::Info << kBackendId <<" This is the pipe backend version " VERSION " (" __DATE__ ", " __TIME__ ") reporting" << endl;
       }  
 };
 

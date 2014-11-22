@@ -52,7 +52,7 @@ struct StartHelperStruct
   int d_fd;
 };
 
-// used to launcht the new thread
+// used to launch the new thread
 void* ChunkedSigningPipe::helperWorker(void* p)
 try
 {
@@ -62,8 +62,8 @@ try
   shs.d_csp->worker(shs.d_id, shs.d_fd);
   return 0;
 }
-catch(std::exception& e) {
-  L<<Logger::Error<<"Signing thread died with error "<<e.what()<<endl;
+catch(...) {
+  L<<Logger::Error<<"unknown exception in signing thread occurred"<<endl;
   return 0;
 }
 
@@ -300,6 +300,11 @@ try
   }
   close(fd);
 }
+catch(PDNSException& pe)
+{
+  L<<Logger::Error<<"Signing thread died because of PDNSException: "<<pe.reason<<endl;
+  close(fd);
+}
 catch(std::exception& e)
 {
   L<<Logger::Error<<"Signing thread died because of std::exception: "<<e.what()<<endl;
@@ -330,8 +335,8 @@ vector<DNSResourceRecord> ChunkedSigningPipe::getChunk(bool final)
   d_chunks.pop_front();
   if(d_chunks.empty())
     d_chunks.push_back(vector<DNSResourceRecord>());
-  if(d_final && front.empty())
-    ; // cerr<<"getChunk returning empty in final"<<endl;
+/*  if(d_final && front.empty())
+      cerr<<"getChunk returning empty in final"<<endl; */
   return front;
 }
 

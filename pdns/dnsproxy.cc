@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation; 
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -18,7 +22,7 @@
 #include "packetcache.hh"
 #include "utility.hh"
 #include "dnsproxy.hh"
-#include "ahuexception.hh"
+#include "pdnsexception.hh"
 #include <sys/types.h>
 #include <errno.h>
 #include "dns.hh"
@@ -38,7 +42,7 @@ DNSProxy::DNSProxy(const string &remote)
   ComboAddress remaddr(remote, 53);
   
   if((d_sock=socket(remaddr.sin4.sin_family, SOCK_DGRAM,0))<0)
-    throw AhuException(string("socket: ")+strerror(errno));
+    throw PDNSException(string("socket: ")+strerror(errno));
  
   ComboAddress local;
   if(remaddr.sin4.sin_family==AF_INET)
@@ -56,11 +60,11 @@ DNSProxy::DNSProxy(const string &remote)
   if(n==10) {
     Utility::closesocket(d_sock);
     d_sock=-1;
-    throw AhuException(string("binding dnsproxy socket: ")+strerror(errno));
+    throw PDNSException(string("binding dnsproxy socket: ")+strerror(errno));
   }
 
   if(connect(d_sock, (sockaddr *)&remaddr, remaddr.getSocklen())<0) 
-    throw AhuException("Unable to UDP connect to remote nameserver "+remaddr.toStringWithPort()+": "+stringerror());
+    throw PDNSException("Unable to UDP connect to remote nameserver "+remaddr.toStringWithPort()+": "+stringerror());
 
   d_xor=Utility::random()&0xffff;
   L<<Logger::Error<<"DNS Proxy launched, local port "<<ntohs(local.sin4.sin_port)<<", remote "<<remaddr.toStringWithPort()<<endl;
@@ -75,12 +79,7 @@ void DNSProxy::go()
 
 void DNSProxy::onlyFrom(const string &ips)
 {
-  vector<string>parts;
-  stringtok(parts,ips,", \t");
-  for(vector<string>::const_iterator i=parts.begin();
-      i!=parts.end();++i)
-    d_ng.addMask(*i);
-  
+  d_ng.toMasks(ips);
 }
 
 bool DNSProxy::recurseFor(DNSPacket* p)
@@ -106,6 +105,7 @@ bool DNSProxy::sendPacket(DNSPacket *p)
     ce.created  = time( NULL );
     ce.qtype = p->qtype.getCode();
     ce.qname = p->qdomain;
+    ce.anyLocal = p->d_anyLocal;
     d_conntrack[id]=ce;
   }
   p->d.id=id^d_xor;
@@ -130,11 +130,12 @@ int DNSProxy::getID_locked()
       return n;
     }
     else if(i->second.created<time(0)-60) {
-      if(i->second.created)
+      if(i->second.created) {
         L<<Logger::Warning<<"Recursive query for remote "<<
           i->second.remote.toStringWithPort()<<" with internal id "<<n<<
           " was not answered by backend within timeout, reusing id"<<endl;
-      
+	S.inc("recursion-unanswered");
+      }
       return n;
     }
   }
@@ -145,6 +146,10 @@ void DNSProxy::mainloop(void)
   try {
     char buffer[1500];
     int len;
+
+    struct msghdr msgh;
+    struct iovec iov;
+    char cbuf[256];
 
     for(;;) {
       len=recv(d_sock, buffer, sizeof(buffer),0); // answer from our backend
@@ -164,7 +169,7 @@ void DNSProxy::mainloop(void)
       memcpy(&d,buffer,sizeof(d));
       {
         Lock l(&d_lock);
-#ifdef WORDS_BIGENDIAN
+#if BYTE_ORDER == BIG_ENDIAN
         // this is needed because spoof ID down below does not respect the native byteorder
         d.id = ( 256 * (uint16_t)buffer[1] ) + (uint16_t)buffer[0];  
 #endif
@@ -190,14 +195,28 @@ void DNSProxy::mainloop(void)
             ", qname or qtype mismatch"<<endl;
           continue;
         }
-        sendto(i->second.outsock, buffer, len, 0, (struct sockaddr*)&i->second.remote, i->second.remote.getSocklen());
+
+        /* Set up iov and msgh structures. */
+        memset(&msgh, 0, sizeof(struct msghdr));
+        iov.iov_base = buffer;
+        iov.iov_len = len;
+        msgh.msg_iov = &iov;
+        msgh.msg_iovlen = 1;
+        msgh.msg_name = (struct sockaddr*)&i->second.remote;
+        msgh.msg_namelen = i->second.remote.getSocklen();
+
+        if(i->second.anyLocal) {
+          addCMsgSrcAddr(&msgh, cbuf, i->second.anyLocal.get_ptr());
+        }
+        if(sendmsg(i->second.outsock, &msgh, 0) < 0)
+          L<<Logger::Warning<<"dnsproxy.cc: Error sending reply with sendmsg (socket="<<i->second.outsock<<"): "<<strerror(errno)<<endl;
         
-        PC.insert(&q, &p);
+        PC.insert(&q, &p, true);
         i->second.created=0;
       }
     }
   }
-  catch(AhuException &ae) {
+  catch(PDNSException &ae) {
     L<<Logger::Error<<"Fatal error in DNS proxy: "<<ae.reason<<endl;
   }
   catch(std::exception &e) {

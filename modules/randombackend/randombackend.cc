@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -21,8 +24,9 @@
 #include "pdns/dns.hh"
 #include "pdns/dnsbackend.hh"
 #include "pdns/dnspacket.hh"
-#include "pdns/ahuexception.hh"
+#include "pdns/pdnsexception.hh"
 #include "pdns/logger.hh"
+#include "pdns/version.hh"
 #include <boost/algorithm/string.hpp>
 
 /* FIRST PART */
@@ -35,7 +39,7 @@ public:
     d_ourname=getArg("hostname");
   }
 
-  bool list(const string &target, int id) {
+  bool list(const string &target, int id, bool include_disabled) {
     return false; // we don't support AXFR
   }
     
@@ -96,8 +100,7 @@ public:
   RandomLoader()
   {
     BackendMakers().report(new RandomFactory);
-    
-    L<<Logger::Info<<" [RandomBackend] This is the randombackend version "VERSION" ("__DATE__", "__TIME__") reporting"<<endl;
+    L << Logger::Info << "[randombackend] This is the random backend version " VERSION " (" __DATE__ ", " __TIME__ ") reporting" << endl;
   }  
 };
 

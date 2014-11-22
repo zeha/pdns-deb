@@ -1,4 +1,3 @@
 usr/lib/*/pdns/libldapbackend.so*
-usr/lib/*/pdns/libldapbackend.a
 usr/bin/zone2ldap usr/bin/
 debian/config/dnsdomain2.schema etc/ldap/schema/

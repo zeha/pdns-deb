@@ -1,5 +1,6 @@
-PowerDNS is copyright Ⓒ 2012-2013 by PowerDNS.COM BV & lots of
-contributors, using the GNU GPLv2 license.
+PowerDNS is copyright Ⓒ 2002-2014 by PowerDNS.COM BV & lots of
+contributors, using the GNU GPLv2 license (see NOTICE for the
+exact license and exception used).
 
 All documentation can be found on http://doc.powerdns.com/
 
@@ -22,7 +23,7 @@ Source code is available on GitHub:
     $ git clone https://github.com/PowerDNS/pdns.git
     
 This repository contains the sources both for the PowerDNS Recursor and for PowerDNS Authoritative Server,
-and both can be built from this repository. Both are released separately as .tar.gz, .deb and .rpm however!
+and both can be built from this repository. Both are released separately as .tar.bz2, .deb and .rpm however!
 
 COMPILING Authoritative Server
 ------------------------------
@@ -30,37 +31,40 @@ PowerDNS Authoritative Server 3.0 and beyond depend on Boost.
 
 On Debian 7.0, the following is useful:
 
-    apt-get install autoconf automake bison flex g++ git libboost-all-dev libtool make pkg-config ragel
-    
+    apt-get install autoconf automake bison flex g++ git libboost-all-dev libtool make pkg-config ragel libmysqlclient-dev
+
+If you build from git, first build configure:
+
+    $ ./bootstrap
+
+(You may need to do that twice. You also need libtool-1.4, 1.3 won't work.
+Automake 1.6 or newer is required, too.)
+
 To compile a very clean version, use:
 
     $ ./configure --with-modules="" --without-lua
     $ make
     # make install
 
-This generates a PowerDNS Authoritative Server binary with no modules, except the bind backend,
-built in.
+This generates a PowerDNS Authoritative Server binary with no modules built in.
 
-When ./configure is run without --with-modules, the gmysql module is
+When `./configure` is run without `--with-modules`, the bind and gmysql module are
 built-in by default and the pipe-backend is compiled for runtime loading.
 
 To add multiple modules, try:
 
-    $ ./configure --with-modules="gmysql gpgsql"
+    $ ./configure --with-modules="bind gmysql gpgsql"
 
 See http://doc.powerdns.com/compiling-powerdns.html for more details.
 
-Please don't use the 'mysql' backend, it is deprecated. Use the 'gmysql'
-one!
-
 COMPILING THE RECURSOR
 ----------------------
-Either use ./configure --enable-recursor or explicitly do 'make pdns_recursor'. Releases
-are built by first running dist-recursor and compiling from the pdns-recursor-x.y subdirectory.
+On Linux, `make pdns_recursor` in the `pdns` subdir may work. The portable, and supported, way to
+build the recursor is first running `dist-recursor` and compiling from the `pdns-recursor-x.y` subdirectory.
 
 SOLARIS NOTES
 -------------
-You need gcc 3.x, preferably 3.2! The 'Sunpro' compiler is currently not
+You need gcc 3.x, preferably 3.2! The "Sunpro" compiler is currently not
 supported (patches are welcome if not too intrusive).
 
 If you encounter problems with the Solaris make, gmake is advised.

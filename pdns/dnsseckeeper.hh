@@ -8,6 +8,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -86,8 +90,8 @@ public:
   bool isPresigned(const std::string& zname);
   bool setPresigned(const std::string& zname);
   bool unsetPresigned(const std::string& zname);
-  
-  bool TSIGGrantsAccess(const string& zone, const string& keyname, const string& algorithm);
+
+  bool TSIGGrantsAccess(const string& zone, const string& keyname);
   bool getTSIGForAccess(const string& zone, const string& master, string* keyname);
   
   void startTransaction()
@@ -163,7 +167,8 @@ private:
 };
 
 class DNSPacket;
+uint32_t calculateEditSOA(SOAData sd, const string& kind);
 uint32_t localtime_format_YYYYMMDDSS(time_t t, uint32_t seq);
 bool editSOA(DNSSECKeeper& dk, const string& qname, DNSPacket* dp);
-uint32_t calculateEditSoa(SOAData sd, const string& kind);
+bool editSOARecord(DNSResourceRecord& rr, const string& kind);
 #endif

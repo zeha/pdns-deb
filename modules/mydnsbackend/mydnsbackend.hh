@@ -13,10 +13,9 @@ class MyDNSBackend : public DNSBackend
 public:
         MyDNSBackend(const string &suffix="");
         ~MyDNSBackend();
-        MyDNSBackend *parent;
         
         void lookup(const QType &, const string &qdomain, DNSPacket *p=0, int zoneId=-1);
-        bool list(const string &target, int domain_id);
+        bool list(const string &target, int domain_id, bool include_disabled=false);
         bool get(DNSResourceRecord &r);
         bool getSOA(const string& name, SOAData& soadata, DNSPacket*);
           

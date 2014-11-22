@@ -5,7 +5,7 @@
 #include <limits.h>
 
 DNSPacketWriter::DNSPacketWriter(vector<uint8_t>& content, const string& qname, uint16_t  qtype, uint16_t qclass, uint8_t opcode)
-  : d_pos(0), d_content(content), d_qname(qname), d_qtype(qtype), d_qclass(qclass), d_canonic(false), d_lowerCase(false)
+  : d_pos(0), d_content(content), d_qname(qname), d_canonic(false), d_lowerCase(false)
 {
   d_content.clear();
   dnsheader dnsheader;
@@ -46,6 +46,7 @@ DNSPacketWriter::DNSPacketWriter(vector<uint8_t>& content, const string& qname, 
 
   d_stuff=0xffff;
   d_labelmap.reserve(16);
+  d_truncatemarker=d_content.size();
 }
 
 dnsheader* DNSPacketWriter::getHeader()
@@ -67,7 +68,7 @@ void DNSPacketWriter::startRecord(const string& name, uint16_t qtype, uint32_t t
   d_stuff = 0;
   d_rollbackmarker=d_content.size();
 
-  if(compress && pdns_iequals(d_qname, d_recordqname)) {  // don't do the whole label compression thing if we *know* we can get away with "see question"
+  if(compress && !d_recordqname.empty() && pdns_iequals(d_qname, d_recordqname)) {  // don't do the whole label compression thing if we *know* we can get away with "see question" - except when compressing the root
     static unsigned char marker[2]={0xc0, 0x0c};
     d_content.insert(d_content.end(), (const char *) &marker[0], (const char *) &marker[2]);
   }
@@ -95,7 +96,7 @@ void DNSPacketWriter::addOpt(int udpsize, int extRCode, int Z, const vector<pair
 
   ttl=ntohl(ttl); // will be reversed later on
   
-  startRecord("", ns_t_opt, ttl, udpsize, ADDITIONAL);
+  startRecord("", ns_t_opt, ttl, udpsize, ADDITIONAL, false);
   for(optvect_t::const_iterator iter = options.begin(); iter != options.end(); ++iter) {
     xfr16BitInt(iter->first);
     xfr16BitInt(iter->second.length());
@@ -248,7 +249,7 @@ void DNSPacketWriter::xfrLabel(const string& Label, bool compress)
       d_record.resize(len + part.size());
 
       memcpy(((&*d_record.begin()) + len), part.c_str(), part.size());
-      pos+=(part.size())+1;        		 
+      pos+=(part.size())+1;                         
     }
     else {
       char labelsize=(char)(i->second - i->first);
@@ -292,6 +293,15 @@ void DNSPacketWriter::rollback()
   d_content.resize(d_rollbackmarker);
   d_record.clear();
   d_stuff=0;
+}
+
+void DNSPacketWriter::truncate()
+{
+  d_content.resize(d_truncatemarker);
+  d_record.clear();
+  d_stuff=0;
+  dnsheader* dh=reinterpret_cast<dnsheader*>( &*d_content.begin());
+  dh->ancount = dh->nscount = dh->arcount = 0;
 }
 
 void DNSPacketWriter::commit()

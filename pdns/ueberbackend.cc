@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -66,25 +70,16 @@ int UeberBackend::s_s=-1; // ?
 //! Loads a module and reports it to all UeberBackend threads
 bool UeberBackend::loadmodule(const string &name)
 {
-  // TODO: Implement dynamic loading?
-#if !defined(WIN32) && !defined(DARWIN)
+  L<<Logger::Warning <<"Loading '"<<name<<"'" << endl;
+
   void *dlib=dlopen(name.c_str(), RTLD_NOW);
-  
+
   if(dlib == NULL) {
-    L<<Logger::Warning <<"Unable to load module '"<<name<<"': "<<dlerror() << endl; 
-    if(name.find("gsqlite3")!=string::npos)
-      L<<Logger::Warning <<"Trying to load gsqlite3backend? Make sure pdns_server was compiled with sqlite3!" <<endl;
+    L<<Logger::Error <<"Unable to load module '"<<name<<"': "<<dlerror() << endl;
     return false;
   }
-  
+
   return true;
-
-#else
-  L << Logger::Warning << "This version doesn't support dynamic loading (yet)." << endl;
-   return false;
-
-#endif // WIN32
-
 }
 
 void UeberBackend::go(void)
@@ -103,6 +98,16 @@ bool UeberBackend::getDomainInfo(const string &domain, DomainInfo &di)
   return false;
 }
 
+bool UeberBackend::createDomain(const string &domain)
+{
+  BOOST_FOREACH(DNSBackend* mydb, backends) {
+    if(mydb->createDomain(domain)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int UeberBackend::addDomainKey(const string& name, const KeyData& key)
 {
   int ret;
@@ -116,6 +121,15 @@ bool UeberBackend::getDomainKeys(const string& name, unsigned int kind, std::vec
 {
   BOOST_FOREACH(DNSBackend* db, backends) {
     if(db->getDomainKeys(name, kind, keys))
+      return true;
+  }
+  return false;
+}
+
+bool UeberBackend::getAllDomainMetadata(const string& name, std::map<std::string, std::vector<std::string> >& meta)
+{
+  BOOST_FOREACH(DNSBackend* db, backends) {
+    if(db->getAllDomainMetadata(name, meta))
       return true;
   }
   return false;
@@ -177,6 +191,50 @@ bool UeberBackend::getTSIGKey(const string& name, string* algorithm, string* con
 }
 
 
+bool UeberBackend::setTSIGKey(const string& name, const string& algorithm, const string& content)
+{
+  BOOST_FOREACH(DNSBackend* db, backends) {
+    if(db->setTSIGKey(name, algorithm, content))
+      return true;
+  }
+  return false;
+}
+
+bool UeberBackend::deleteTSIGKey(const string& name)
+{
+  BOOST_FOREACH(DNSBackend* db, backends) {
+    if(db->deleteTSIGKey(name))
+      return true;
+  }
+  return false;
+}
+
+bool UeberBackend::getTSIGKeys(std::vector< struct TSIGKey > &keys)
+{
+  BOOST_FOREACH(DNSBackend* db, backends) {
+    db->getTSIGKeys(keys);
+  }
+  return true;
+}
+
+bool UeberBackend::getDirectNSECx(uint32_t id, const string &hashed, const QType &qtype, string &before, DNSResourceRecord &rr)
+{
+  BOOST_FOREACH(DNSBackend* db, backends) {
+    if(db->getDirectNSECx(id, hashed, qtype, before, rr))
+      return true;
+  }
+  return false;
+}
+
+bool UeberBackend::getDirectRRSIGs(const string &signer, const string &qname, const QType &qtype, vector<DNSResourceRecord> &rrsigs)
+{
+  BOOST_FOREACH(DNSBackend* db, backends) {
+    if(db->getDirectRRSIGs(signer, qname, qtype, rrsigs))
+      return true;
+  }
+  return false;
+}
+
 void UeberBackend::reload()
 {
   for ( vector< DNSBackend * >::iterator i = backends.begin(); i != backends.end(); ++i )
@@ -216,6 +274,82 @@ void UeberBackend::getUpdatedMasters(vector<DomainInfo>* domains)
   }
 }
 
+bool UeberBackend::getAuth(DNSPacket *p, SOAData *sd, const string &target, int *zoneId)
+{
+  int best_match_len = -1;
+  bool from_cache = false;  // Was this result fetched from the cache?
+
+  // If not special case of caching explicitly disabled (sd->db = -1), first
+  // find the best match from the cache. If DS then we need to find parent so
+  // dont bother with caching as it confuses matters.
+  if( sd->db != (DNSBackend *)-1 && d_cache_ttl && p->qtype != QType::DS ) {
+      string subdomain(target);
+      int cstat, loops = 0;
+      do {
+        d_question.qtype = QType::SOA;
+        d_question.qname = subdomain;
+        d_question.zoneId = -1;
+
+        cstat = cacheHas(d_question,d_answers);
+
+        if(cstat==1 && !d_answers.empty()) {
+          fillSOAData(d_answers[0].content,*sd);
+          sd->domain_id = d_answers[0].domain_id;
+          sd->ttl = d_answers[0].ttl;
+          sd->db = 0;
+          sd->qname = subdomain;
+          //L<<Logger::Error<<"Best cache match: " << sd->qname << " itteration " << loops <<endl;
+
+          // Found first time round this must be the best match
+          if( loops == 0 )
+            return true;
+
+          from_cache = true;
+          best_match_len = sd->qname.length();
+
+          break;
+        }
+        loops++;
+      }
+      while( chopOff( subdomain ) );   // 'www.powerdns.org' -> 'powerdns.org' -> 'org' -> ''
+  }
+
+  for(vector<DNSBackend *>::const_iterator i=backends.begin(); i!=backends.end();++i)
+    if((*i)->getAuth(p, sd, target, zoneId, best_match_len)) {
+        best_match_len = sd->qname.length();
+        from_cache = false;
+
+        // Shortcut for the case that we got a direct hit - no need to go
+        // through the other backends then.
+        if( best_match_len == (int)target.length() )
+            goto auth_found;
+    }
+
+  if( best_match_len == -1 )
+      return false;
+
+auth_found:
+    // Insert into cache. Don't cache if the query was a DS
+    if( d_cache_ttl && ! from_cache && p->qtype != QType::DS ) {
+        //L<<Logger::Error<<"Saving auth cache for " << sd->qname <<endl;
+        d_question.qtype = QType::SOA;
+        d_question.qname = sd->qname;
+        d_question.zoneId = -1;
+
+        DNSResourceRecord rr;
+        rr.qname = sd->qname;
+        rr.qtype = QType::SOA;
+        rr.content = serializeSOAData(*sd);
+        rr.ttl = sd->ttl;
+        rr.domain_id = sd->domain_id;
+        vector<DNSResourceRecord> rrs;
+        rrs.push_back(rr);
+        addCache(d_question, rrs);
+    }
+
+    return true;
+}
+
 /** special trick - if sd.db is set to -1, the cache is ignored */
 bool UeberBackend::getSOA(const string &domain, SOAData &sd, DNSPacket *p)
 {
@@ -239,15 +373,17 @@ bool UeberBackend::getSOA(const string &domain, SOAData &sd, DNSPacket *p)
     
   for(vector<DNSBackend *>::const_iterator i=backends.begin();i!=backends.end();++i)
     if((*i)->getSOA(domain, sd, p)) {
-      DNSResourceRecord rr;
-      rr.qname=domain;
-      rr.qtype=QType::SOA;
-      rr.content=serializeSOAData(sd);
-      rr.ttl=sd.ttl;
-      rr.domain_id=sd.domain_id;
-      vector<DNSResourceRecord> rrs;
-      rrs.push_back(rr);
-      addCache(d_question, rrs);
+      if( d_cache_ttl ) {
+        DNSResourceRecord rr;
+        rr.qname=domain;
+        rr.qtype=QType::SOA;
+        rr.content=serializeSOAData(sd);
+        rr.ttl=sd.ttl;
+        rr.domain_id=sd.domain_id;
+        vector<DNSResourceRecord> rrs;
+        rrs.push_back(rr);
+        addCache(d_question, rrs);
+      }
       return true;
     }
 
@@ -255,13 +391,12 @@ bool UeberBackend::getSOA(const string &domain, SOAData &sd, DNSPacket *p)
   return false;
 }
 
-bool UeberBackend::superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *account, DNSBackend **db)
+bool UeberBackend::superMasterBackend(const string &ip, const string &domain, const vector<DNSResourceRecord>&nsset, string *nameserver, string *account, DNSBackend **db)
 {
   for(vector<DNSBackend *>::const_iterator i=backends.begin();i!=backends.end();++i)
-    if((*i)->superMasterBackend(ip,domain,nsset,account, db))
+    if((*i)->superMasterBackend(ip, domain, nsset, nameserver, account, db))
       return true;
   return false;
-
 }
 
 void UeberBackend::setStatus(const string &st)
@@ -274,6 +409,9 @@ UeberBackend::UeberBackend(const string &pname)
   pthread_mutex_lock(&instances_lock);
   instances.push_back(this); // report to the static list of ourself
   pthread_mutex_unlock(&instances_lock);
+
+  d_cache_ttl = ::arg().asNum("query-cache-ttl");
+  d_negcache_ttl = ::arg().asNum("negquery-cache-ttl");
 
   tid=pthread_self(); 
   stale=false;
@@ -314,10 +452,7 @@ int UeberBackend::cacheHas(const Question &q, vector<DNSResourceRecord> &rrs)
   static unsigned int *qcachehit=S.getPointer("query-cache-hit");
   static unsigned int *qcachemiss=S.getPointer("query-cache-miss");
 
-  static int negqueryttl=::arg().asNum("negquery-cache-ttl");
-  static int queryttl=::arg().asNum("query-cache-ttl");
-
-  if(!negqueryttl && !queryttl) {
+  if(!d_cache_ttl && ! d_negcache_ttl) {
     (*qcachemiss)++;
     return -1;
   }
@@ -344,36 +479,34 @@ int UeberBackend::cacheHas(const Question &q, vector<DNSResourceRecord> &rrs)
 void UeberBackend::addNegCache(const Question &q)
 {
   extern PacketCache PC;
-  static int negqueryttl=::arg().asNum("negquery-cache-ttl");
-  if(!negqueryttl)
+  if(!d_negcache_ttl)
     return;
   // we should also not be storing negative answers if a pipebackend does scopeMask, but we can't pass a negative scopeMask in an empty set!
-  PC.insert(q.qname, q.qtype, PacketCache::QUERYCACHE, "", negqueryttl, q.zoneId);
+  PC.insert(q.qname, q.qtype, PacketCache::QUERYCACHE, "", d_negcache_ttl, q.zoneId);
 }
 
 void UeberBackend::addCache(const Question &q, const vector<DNSResourceRecord> &rrs)
 {
   extern PacketCache PC;
-  static unsigned int queryttl=::arg().asNum("query-cache-ttl");
-  unsigned int cachettl;
 
-  if(!queryttl)
+  if(!d_cache_ttl)
     return;
-  
+
+  unsigned int store_ttl = d_cache_ttl;
+
   //  L<<Logger::Warning<<"inserting: "<<q.qname+"|N|"+q.qtype.getName()+"|"+itoa(q.zoneId)<<endl;
   std::ostringstream ostr;
   boost::archive::binary_oarchive boa(ostr, boost::archive::no_header);
 
-  cachettl = queryttl;
   BOOST_FOREACH(DNSResourceRecord rr, rrs) {
-    if (rr.ttl < queryttl)
-      cachettl = rr.ttl;
+    if (rr.ttl < d_cache_ttl)
+      store_ttl = rr.ttl;
     if (rr.scopeMask)
       return;
   }
 
   boa << rrs;
-  PC.insert(q.qname, q.qtype, PacketCache::QUERYCACHE, ostr.str(), cachettl, q.zoneId);
+  PC.insert(q.qname, q.qtype, PacketCache::QUERYCACHE, ostr.str(), store_ttl, q.zoneId);
 }
 
 void UeberBackend::alsoNotifies(const string &domain, set<string> *ips)
@@ -393,7 +526,7 @@ void UeberBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt
 {
   if(stale) {
     L<<Logger::Error<<"Stale ueberbackend received question, signalling that we want to be recycled"<<endl;
-    throw AhuException("We are stale, please recycle");
+    throw PDNSException("We are stale, please recycle");
   }
 
   DLOG(L<<"UeberBackend received question for "<<qtype.getName()<<" of "<<qname<<endl);
@@ -418,7 +551,7 @@ void UeberBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt
   if(!backends.size()) {
     L<<Logger::Error<<Logger::NTLog<<"No database backends available - unable to answer questions."<<endl;
     stale=true; // please recycle us! 
-    throw AhuException("We are stale, please recycle");
+    throw PDNSException("We are stale, please recycle");
   }
   else {
     d_question.qtype=qtype;
@@ -445,10 +578,10 @@ void UeberBackend::lookup(const QType &qtype,const string &qname, DNSPacket *pkt
   d_handle.parent=this;
 }
 
-void UeberBackend::getAllDomains(vector<DomainInfo> *domains) {
+void UeberBackend::getAllDomains(vector<DomainInfo> *domains, bool include_disabled) {
   for (vector<DNSBackend*>::iterator i = backends.begin(); i != backends.end(); ++i )
   {
-    (*i)->getAllDomains(domains);
+    (*i)->getAllDomains(domains, include_disabled);
   }
 }
 
@@ -478,7 +611,7 @@ bool UeberBackend::get(DNSResourceRecord &rr)
   return true;
 }
 
-bool UeberBackend::list(const string &target, int domain_id)
+bool UeberBackend::list(const string &target, int domain_id, bool include_disabled)
 {
   L<<Logger::Error<<"UeberBackend::list called, should NEVER EVER HAPPEN"<<endl;
   exit(1);

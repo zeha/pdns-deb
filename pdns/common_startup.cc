@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -16,14 +20,15 @@
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include "common_startup.hh"
-bool g_anyToTcp;
-bool g_addSuperfluousNSEC3;
-typedef Distributor<DNSPacket,DNSPacket,PacketHandler> DNSDistributor;
+#include "ws-auth.hh"
+#include "secpoll-auth.hh"
 
+bool g_anyToTcp;
+typedef Distributor<DNSPacket,DNSPacket,PacketHandler> DNSDistributor;
 
 ArgvMap theArg;
 StatBag S;  //!< Statistics are gathered across PDNS via the StatBag class S
-PacketCache PC; //!< This is the main PacketCache, shared accross all threads
+PacketCache PC; //!< This is the main PacketCache, shared across all threads
 DNSProxy *DP;
 DynListener *dl;
 CommunicatorClass Communicator;
@@ -39,21 +44,26 @@ ArgvMap &arg()
 void declareArguments()
 {
   ::arg().set("local-port","The port on which we listen")="53";
-  ::arg().setSwitch("log-failed-updates","If PDNS should log failed update requests")="";
-  ::arg().setSwitch("log-dns-details","If PDNS should log DNS non-erroneous details")="";
+  ::arg().setSwitch("experimental-dnsupdate","Enable/Disable DNS update (RFC2136) support. Default is no.")="no";
+  ::arg().set("allow-dnsupdate-from","A global setting to allow DNS updates from these IP ranges.")="127.0.0.0/8,::1";
+  ::arg().setSwitch("forward-dnsupdate","A global setting to allow DNS update packages that are for a Slave domain, to be forwarded to the master.")="yes";
+  ::arg().setSwitch("log-dns-details","If PDNS should log DNS non-erroneous details")="no";
   ::arg().setSwitch("log-dns-queries","If PDNS should log all incoming DNS queries")="no";
-  ::arg().set("urlredirector","Where we send hosts to that need to be url redirected")="127.0.0.1";
-  ::arg().set("smtpredirector","Our smtpredir MX host")="a.misconfigured.powerdns.smtp.server";
   ::arg().set("local-address","Local IP addresses to which we bind")="0.0.0.0";
+  ::arg().setSwitch("local-address-nonexist-fail","Fail to start if one or more of the local-address's do not exist on this server")="yes";
   ::arg().set("local-ipv6","Local IP address to which we bind")="";
+  ::arg().setSwitch("reuseport","Enable higher performance on compliant kernels by using SO_REUSEPORT allowing each receiver thread to open its own socket")="no";
+  ::arg().setSwitch("local-ipv6-nonexist-fail","Fail to start if one or more of the local-ipv6 addresses do not exist on this server")="yes";
   ::arg().set("query-local-address","Source IP address for sending queries")="0.0.0.0";
   ::arg().set("query-local-address6","Source IPv6 address for sending queries")="::";
   ::arg().set("overload-queue-length","Maximum queuelength moving to packetcache only")="0";
   ::arg().set("max-queue-length","Maximum queuelength before considering situation lost")="5000";
-  ::arg().set("soa-serial-offset","Make sure that no SOA serial is less than this number")="0";
-  
+
   ::arg().set("retrieval-threads", "Number of AXFR-retrieval threads for slave operation")="2";
   ::arg().setSwitch("experimental-json-interface", "If the webserver should serve JSON data")="no";
+  ::arg().setSwitch("experimental-api-readonly", "If the JSON API should disallow data modification")="no";
+  ::arg().set("experimental-api-key", "REST API Static authentication key (required for API use)")="";
+  ::arg().setSwitch("experimental-dname-processing", "If we should support DNAME records")="no";
 
   ::arg().setCmd("help","Provide a helpful message");
   ::arg().setCmd("version","Output version and compilation date");
@@ -63,8 +73,6 @@ void declareArguments()
   
   ::arg().set("version-string","PowerDNS version in packets - full, anonymous, powerdns or custom")="full"; 
   ::arg().set("control-console","Debugging switch - don't use")="no"; // but I know you will!
-  ::arg().set("fancy-records","Process URL and MBOXFW records")="no";
-  ::arg().set("wildcard-url","Process URL and MBOXFW records")="no";
   ::arg().set("loglevel","Amount of logging. Higher is more. Do not set below 3")="4";
   ::arg().set("default-soa-name","name to insert in the SOA record if none set in the backend")="a.misconfigured.powerdns.server";
   ::arg().set("default-soa-mail","mail address to insert in the SOA record if none set in the backend")="";
@@ -75,16 +83,17 @@ void declareArguments()
   ::arg().set("recursor","If recursion is desired, IP address of a recursing nameserver")="no"; 
   ::arg().set("allow-recursion","List of subnets that are allowed to recurse")="0.0.0.0/0";
   ::arg().set("pipebackend-abi-version","Version of the pipe backend ABI")="1";
-  
+  ::arg().set("udp-truncation-threshold", "Maximum UDP response size before we truncate")="1680";
   ::arg().set("disable-tcp","Do not listen to TCP queries")="no";
-  ::arg().set("disable-axfr","Do not allow zone transfers")="no";
   
   ::arg().set("config-name","Name of this virtual configuration - will rename the binary image")="";
 
   ::arg().set("load-modules","Load this module - supply absolute or relative path")="";
   ::arg().set("launch","Which backends to launch and order to query them in")="";
   ::arg().setSwitch("disable-axfr","Disable zonetransfers but do allow TCP queries")="no";
-  ::arg().set("allow-axfr-ips","Allow zonetransfers only to these subnets")="0.0.0.0/0,::/0";
+  ::arg().set("allow-axfr-ips","Allow zonetransfers only to these subnets")="127.0.0.0/8,::1";
+  ::arg().set("only-notify", "Only send AXFR NOTIFY to these IP addresses or netmasks")="0.0.0.0/0,::/0";
+  ::arg().set("also-notify", "When notifying a domain, also notify these nameservers")="";
   ::arg().set("slave-cycle-interval","Reschedule failed SOA serial checks once every .. seconds")="60";
 
   ::arg().set("tcp-control-address","If set, PowerDNS can be controlled over TCP on this address")="";
@@ -94,6 +103,7 @@ void declareArguments()
   
   ::arg().setSwitch("slave","Act as a slave")="no";
   ::arg().setSwitch("master","Act as a master")="no";
+  ::arg().setSwitch("disable-axfr-rectify","Disable the rectify step during an outgoing AXFR. Only required for regression testing.")="no";
   ::arg().setSwitch("guardian","Run within a guardian process")="no";
   ::arg().setSwitch("send-root-referral","Send out old-fashioned root-referral instead of ServFail in case of no authority")="no";
   ::arg().setSwitch("prevent-self-notification","Don't send notifications to what we think is ourself")="yes";
@@ -101,21 +111,25 @@ void declareArguments()
   ::arg().setSwitch("webserver-print-arguments","If the webserver should print arguments")="no"; 
   ::arg().setSwitch("edns-subnet-processing","If we should act on EDNS Subnet options")="no"; 
   ::arg().setSwitch("any-to-tcp","Answer ANY queries with tc=1, shunting to TCP")="no"; 
-  ::arg().set("edns-subnet-option-number","EDNS option number to use")="20730"; 
   ::arg().set("webserver-address","IP Address of webserver to listen on")="127.0.0.1";
   ::arg().set("webserver-port","Port of webserver to listen on")="8081";
   ::arg().set("webserver-password","Password required for accessing the webserver")="";
+  ::arg().set("webserver-allow-from","Webserver access is only allowed from these subnets")="0.0.0.0/0,::/0";
 
   ::arg().setSwitch("out-of-zone-additional-processing","Do out of zone additional processing")="yes";
   ::arg().setSwitch("do-ipv6-additional-processing", "Do AAAA additional processing")="yes";
   ::arg().setSwitch("query-logging","Hint backends that queries should be logged")="no";
-  
+
+  ::arg().set("carbon-ourname", "If set, overrides our reported hostname for carbon stats")="";
+  ::arg().set("carbon-server", "If set, send metrics in carbon (graphite) format to this server")="";
+  ::arg().set("carbon-interval", "Number of seconds between carbon (graphite) updates")="30";
+
   ::arg().set("cache-ttl","Seconds to store packets in the PacketCache")="20";
   ::arg().set("recursive-cache-ttl","Seconds to store packets for recursive queries in the PacketCache")="10";
   ::arg().set("negquery-cache-ttl","Seconds to store negative query results in the QueryCache")="60";
   ::arg().set("query-cache-ttl","Seconds to store query results in the QueryCache")="20";
   ::arg().set("soa-minimum-ttl","Default SOA minimum ttl")="3600";
-  ::arg().set("server-id", "Returned when queried for 'server.id' TXT or NSID, defaults to hostname")="";
+  ::arg().set("server-id", "Returned when queried for 'server.id' TXT or NSID, defaults to hostname - disabled or custom")="";
   ::arg().set("soa-refresh-default","Default SOA refresh")="10800";
   ::arg().set("soa-retry-default","Default SOA retry")="3600";
   ::arg().set("soa-expire-default","Default SOA expire")="604800";
@@ -132,6 +146,7 @@ void declareArguments()
   ::arg().set("setgid","If set, change group id to this gid for more security")="";
 
   ::arg().set("max-cache-entries", "Maximum number of cache entries")="1000000";
+  ::arg().set("max-signature-cache-entries", "Maximum number of signatures cache entries")="";
   ::arg().set("max-ent-entries", "Maximum number of empty non-terminals in a zone")="100000";
   ::arg().set("entropy-source", "If set, read entropy from this file")="/dev/urandom";
 
@@ -139,25 +154,30 @@ void declareArguments()
 
   ::arg().setSwitch("traceback-handler","Enable the traceback handler (Linux only)")="yes";
   ::arg().setSwitch("direct-dnskey","Fetch DNSKEY RRs from backend during DNSKEY synthesis")="no";
-  ::arg().setSwitch("add-superfluous-nsec3-for-old-bind","Add superfluous NSEC3 record to positive wildcard response")="yes";
   ::arg().set("default-ksk-algorithms","Default KSK algorithms")="rsasha256";
   ::arg().set("default-ksk-size","Default KSK size (0 means default)")="0";
   ::arg().set("default-zsk-algorithms","Default ZSK algorithms")="rsasha256";
-  ::arg().set("default-zsk-size","Default KSK size (0 means default)")="0";
+  ::arg().set("default-zsk-size","Default ZSK size (0 means default)")="0";
+  ::arg().set("max-nsec3-iterations","Limit the number of NSEC3 hash iterations")="500"; // RFC5155 10.3
 
   ::arg().set("include-dir","Include *.conf files from this directory");
+  ::arg().set("security-poll-suffix","Domain name from which to query security update notifications")="secpoll.powerdns.com.";
 }
 
 void declareStats(void)
 {
   S.declare("udp-queries","Number of UDP queries received");
+  S.declare("udp-do-queries","Number of UDP queries received with DO bit");
   S.declare("udp-answers","Number of answers sent out over UDP");
+  S.declare("udp-answers-bytes","Total size of answers sent out over UDP");
 
   S.declare("udp4-answers","Number of IPv4 answers sent out over UDP");
-  S.declare("udp4-queries","Number of IPv4UDP queries received");
+  S.declare("udp4-queries","Number of IPv4 UDP queries received");
   S.declare("udp6-answers","Number of IPv6 answers sent out over UDP");
   S.declare("udp6-queries","Number of IPv6 UDP queries received");
 
+  S.declare("rd-queries", "Number of recursion desired questions");
+  S.declare("recursion-unanswered", "Number of packets unanswered by configured recursor");
   S.declare("recursing-answers","Number of recursive answers sent out");
   S.declare("recursing-questions","Number of questions sent to recursor");
   S.declare("corrupt-packets","Number of corrupt packets received");
@@ -173,11 +193,15 @@ void declareStats(void)
   S.declare("query-cache-hit","Number of hits on the query cache");
   S.declare("query-cache-miss","Number of misses on the query cache");
 
+  S.declare("dnsupdate-queries", "DNS update packets received.");
+  S.declare("dnsupdate-answers", "DNS update packets successfully answered.");
+  S.declare("dnsupdate-refused", "DNS update packets that are refused.");
+  S.declare("dnsupdate-changes", "DNS update changes to records in total.");
 
   S.declare("servfail-packets","Number of times a server-failed packet was sent out");
   S.declare("latency","Average number of microseconds needed to answer a question");
   S.declare("timedout-packets","Number of packets which weren't answered within timeout set");
-
+  S.declare("security-status", "Security status based on regular polling");
   S.declareRing("queries","UDP Queries Received");
   S.declareRing("nxdomain-queries","Queries for non-existent records within existent domains");
   S.declareRing("noerror-queries","Queries for existing records, but for type we don't have");
@@ -198,23 +222,12 @@ int isGuarded(char **argv)
   return !!p;
 }
 
-
-void sendout(const DNSDistributor::AnswerData &AD)
+void sendout(const AnswerData<DNSPacket> &AD)
 {
-  static unsigned int &numanswered=*S.getPointer("udp-answers");
-  static unsigned int &numanswered4=*S.getPointer("udp4-answers");
-  static unsigned int &numanswered6=*S.getPointer("udp6-answers");
-
   if(!AD.A)
     return;
   
   N->send(AD.A);
-  numanswered++;
-
-  if(AD.A->d_remote.getSocklen()==sizeof(sockaddr_in))
-    numanswered4++;
-  else
-    numanswered6++;
 
   int diff=AD.A->d_dt.udiff();
   avg_latency=(int)(1023*avg_latency/1024+diff/1024);
@@ -226,23 +239,36 @@ void sendout(const DNSDistributor::AnswerData &AD)
 void *qthread(void *number)
 {
   DNSPacket *P;
-  DNSDistributor *distributor = new DNSDistributor(::arg().asNum("distributor-threads")); // the big dispatcher!
+  DNSDistributor *distributor = DNSDistributor::Create(::arg().asNum("distributor-threads", 1)); // the big dispatcher!
   DNSPacket question;
   DNSPacket cached;
 
   unsigned int &numreceived=*S.getPointer("udp-queries");
-  unsigned int &numanswered=*S.getPointer("udp-answers");
+  unsigned int &numreceiveddo=*S.getPointer("udp-do-queries");
 
   unsigned int &numreceived4=*S.getPointer("udp4-queries");
-  unsigned int &numanswered4=*S.getPointer("udp4-answers");
 
   unsigned int &numreceived6=*S.getPointer("udp6-queries");
-  unsigned int &numanswered6=*S.getPointer("udp6-answers");
 
   int diff;
   bool logDNSQueries = ::arg().mustDo("log-dns-queries");
+  bool doRecursion = ::arg().mustDo("recursor");
   bool skipfirst=true;
   unsigned int maintcount = 0;
+  UDPNameserver *NS = N;
+
+  // If we have SO_REUSEPORT then create a new port for all receiver threads
+  // other than the first one.
+  if( number != NULL && NS->canReusePort() ) {
+    L<<Logger::Notice<<"Starting new listen thread on the same IPs/ports using SO_REUSEPORT"<<endl;
+    try {
+      NS = new UDPNameserver( true );
+    } catch(PDNSException &e) {
+      L<<Logger::Error<<"Unable to reuse port, falling back to original bind"<<endl;
+      NS = N;
+    }
+  }
+
   for(;;) {
     if (skipfirst)
       skipfirst=false;
@@ -250,15 +276,15 @@ void *qthread(void *number)
       numreceived++;
 
     if(number==0) { // only run on main thread
-      if(!((maintcount++)%250)) { // maintenance tasks
+      if(!((maintcount++)%250)) { // maintenance tasks - this can conceivably run infrequently
         S.set("latency",(int)avg_latency);
         int qcount, acount;
-        distributor->getQueueSizes(qcount, acount);
+        distributor->getQueueSizes(qcount, acount);  // this does locking and other things, so don't get smart
         S.set("qsize-q",qcount);
       }
     }
 
-    if(!(P=N->receive(&question))) { // receive a packet         inline
+    if(!(P=NS->receive(&question))) { // receive a packet         inline
       continue;                    // packet was broken, try again
     }
 
@@ -266,6 +292,9 @@ void *qthread(void *number)
       numreceived4++;
     else
       numreceived6++;
+
+    if(P->d_dnssecOk)
+      numreceiveddo++;
 
      if(P->d.qr)
        continue;
@@ -282,29 +311,29 @@ void *qthread(void *number)
             "', do = " <<P->d_dnssecOk <<", bufsize = "<< P->getMaxReplyLen()<<": ";
     }
 
+    if((P->d.opcode != Opcode::Notify && P->d.opcode != Opcode::Update) && P->couldBeCached()) {
+      bool haveSomething = false;
+      if (doRecursion && P->d.rd && DP->recurseFor(P))
+        haveSomething=PC.get(P, &cached, true); // does the PacketCache recognize this ruestion (recursive)?
+      if (!haveSomething)
+        haveSomething=PC.get(P, &cached, false); // does the PacketCache recognize this question?
+      if (haveSomething) {
+        if(logDNSQueries)
+          L<<"packetcache HIT"<<endl;
+        cached.setRemote(&P->d_remote);  // inlined
+        cached.setSocket(P->getSocket());                               // inlined
+        cached.d_anyLocal = P->d_anyLocal;
+        cached.setMaxReplyLen(P->getMaxReplyLen());
+        cached.d.rd=P->d.rd; // copy in recursion desired bit
+        cached.d.id=P->d.id;
+        cached.commitD(); // commit d to the packet                        inlined
 
-    if((P->d.opcode != Opcode::Notify) && P->couldBeCached() && PC.get(P, &cached)) { // short circuit - does the PacketCache recognize this question?
-      if(logDNSQueries)
-        L<<"packetcache HIT"<<endl;
-      cached.setRemote(&P->d_remote);  // inlined
-      cached.setSocket(P->getSocket());                               // inlined
-      cached.d_anyLocal = P->d_anyLocal;
-      cached.setMaxReplyLen(P->getMaxReplyLen());
-      cached.d.rd=P->d.rd; // copy in recursion desired bit 
-      cached.d.id=P->d.id;
-      cached.commitD(); // commit d to the packet                        inlined
+        NS->send(&cached);   // answer it then                              inlined
+        diff=P->d_dt.udiff();
+        avg_latency=(int)(0.999*avg_latency+0.001*diff); // 'EWMA'
 
-      N->send(&cached);   // answer it then                              inlined
-      diff=P->d_dt.udiff();                                                    
-      avg_latency=(int)(0.999*avg_latency+0.001*diff); // 'EWMA'
-      
-      numanswered++;
-      if(P->d_remote.sin4.sin_family==AF_INET)
-        numanswered4++;
-      else
-        numanswered6++;
-
-      continue;
+        continue;
+      }
     }
     
     if(distributor->isOverloaded()) {
@@ -333,24 +362,28 @@ void mainthread()
      newuid=Utility::makeUidNumeric(::arg()["setuid"]); 
    
    g_anyToTcp = ::arg().mustDo("any-to-tcp");
-   g_addSuperfluousNSEC3 = ::arg().mustDo("add-superfluous-nsec3-for-old-bind");
+
+   DNSPacket::s_udpTruncationThreshold = std::max(512, ::arg().asNum("udp-truncation-threshold"));
    DNSPacket::s_doEDNSSubnetProcessing = ::arg().mustDo("edns-subnet-processing");
-   
-#ifndef WIN32
+
+   doSecPoll(true); // this must be BEFORE chroot
+
    if(!::arg()["chroot"].empty()) {  
      if(::arg().mustDo("master") || ::arg().mustDo("slave"))
         gethostbyname("a.root-servers.net"); // this forces all lookup libraries to be loaded
+     Utility::dropGroupPrivs(newuid, newgid);
      if(chroot(::arg()["chroot"].c_str())<0 || chdir("/")<0) {
        L<<Logger::Error<<"Unable to chroot to '"+::arg()["chroot"]+"': "<<strerror(errno)<<", exiting"<<endl; 
        exit(1);
      }   
      else
        L<<Logger::Error<<"Chrooted to '"<<::arg()["chroot"]<<"'"<<endl;      
-   }  
-#endif
+   } else {
+     Utility::dropGroupPrivs(newuid, newgid);
+   }
 
-  StatWebServer sws;
-  Utility::dropPrivs(newuid, newgid);
+  AuthWebServer webserver;
+  Utility::dropUserPrivs(newuid);
 
   if(::arg().mustDo("recursor")){
     DP=new DNSProxy(::arg()["recursor"]);
@@ -363,21 +396,28 @@ void mainthread()
   pthread_t qtid;
 
   if(::arg().mustDo("webserver"))
-    sws.go();
-  
+    webserver.go();
+
   if(::arg().mustDo("slave") || ::arg().mustDo("master"))
     Communicator.go(); 
 
   if(TN)
     TN->go(); // tcp nameserver launch
-    
+
+  pthread_create(&qtid,0,carbonDumpThread, 0); // runs even w/o carbon, might change @ runtime    
+
   //  fork(); (this worked :-))
-  unsigned int max_rthreads= ::arg().asNum("receiver-threads");
+  unsigned int max_rthreads= ::arg().asNum("receiver-threads", 1);
   for(unsigned int n=0; n < max_rthreads; ++n)
     pthread_create(&qtid,0,qthread, reinterpret_cast<void *>(n)); // receives packets
 
-  void *p;
-  pthread_join(qtid, &p);
+  for(;;) {
+    sleep(1800);
+    try {
+      doSecPoll(false);
+    }
+    catch(...){}
+  }
   
   L<<Logger::Error<<"Mainthread exiting - should never happen"<<endl;
 }

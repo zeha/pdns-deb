@@ -6,6 +6,9 @@
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -53,7 +56,6 @@
 #include "packethandler.hh"
 #include "statbag.hh"
 #include "tcpreceiver.hh"
-#include "ws.hh"
 #include "misc.hh"
 #include "dynlistener.hh"
 #include "dynhandler.hh"
@@ -63,7 +65,6 @@
 #include "common_startup.hh"
 #include "dnsrecords.hh"
 #include "version.hh"
-
 
 time_t s_starttime;
 
@@ -136,6 +137,15 @@ int g_fd1[2], g_fd2[2];
 FILE *g_fp;
 pthread_mutex_t g_guardian_lock = PTHREAD_MUTEX_INITIALIZER;
 
+// The next two methods are not in dynhandler.cc because they use a few items declared in this file.
+static string DLCycleHandler(const vector<string>&parts, pid_t ppid)
+{
+  kill(cpid, SIGKILL); // why?
+  kill(cpid, SIGKILL); // why?
+  sleep(1);
+  return "ok";
+}
+
 static string DLRestHandler(const vector<string>&parts, pid_t ppid)
 {
   string line;
@@ -152,13 +162,13 @@ static string DLRestHandler(const vector<string>&parts, pid_t ppid)
   try {
     writen2(g_fd1[1],line.c_str(),line.size()+1);
   }
-  catch(AhuException &ae) {
+  catch(PDNSException &ae) {
     return "Error communicating with instance: "+ae.reason;
   }
   char mesg[512];
   string response;
   while(fgets(mesg,sizeof(mesg),g_fp)) {
-    if(*mesg=='\n')
+    if(*mesg=='\0')
       break;
     response+=mesg;
   }
@@ -166,13 +176,7 @@ static string DLRestHandler(const vector<string>&parts, pid_t ppid)
   return response;
 }
 
-static string DLCycleHandler(const vector<string>&parts, pid_t ppid)
-{
-  kill(cpid, SIGKILL); // why?
-  kill(cpid, SIGKILL); // why?
-  sleep(1);
-  return "ok";
-}
+
 
 static int guardian(int argc, char **argv)
 {
@@ -337,11 +341,10 @@ static void UNIX_declareArguments()
   ::arg().set("config-dir","Location of configuration directory (pdns.conf)")=SYSCONFDIR;
   ::arg().set("config-name","Name of this virtual configuration - will rename the binary image")="";
   ::arg().set("socket-dir","Where the controlsocket will live")=LOCALSTATEDIR;
-  ::arg().set("module-dir","Default directory for modules")=LIBDIR;
+  ::arg().set("module-dir","Default directory for modules")=PKGLIBDIR;
   ::arg().set("chroot","If set, chroot to this directory for more security")="";
   ::arg().set("logging-facility","Log under a specific facility")="";
   ::arg().set("daemon","Operate as a daemon")="no";
-
 }
 
 static void loadModules()
@@ -396,7 +399,7 @@ static void tbhandler(int num)
 //! The main function of pdns, the pdns process
 int main(int argc, char **argv)
 {
-  versionSetProduct("Authoritative Server");
+  versionSetProduct(ProductAuthoritative);
   reportAllTypes(); // init MOADNSParser
 
   s_programname="pdns";
@@ -422,6 +425,7 @@ int main(int argc, char **argv)
     
     if(::arg().mustDo("version")) {
       showProductVersion();
+      showBuildConfiguration();
       exit(99);
     }
 
@@ -487,9 +491,9 @@ int main(int argc, char **argv)
     }
     
     if(::arg().mustDo("help")) {
-      cerr<<"syntax:"<<endl<<endl;
-      cerr<<::arg().helpstring(::arg()["help"])<<endl;
-      exit(99);
+      cout<<"syntax:"<<endl<<endl;
+      cout<<::arg().helpstring(::arg()["help"])<<endl;
+      exit(0);
     }
     
     if(::arg().mustDo("config")) {
@@ -504,10 +508,6 @@ int main(int argc, char **argv)
         cout<<*i<<endl;
 
       exit(99);
-    }
-
-    if(::arg().mustDo("fancy-records")) {
-      reportFancyTypes();
     }
 
     if(!::arg().asNum("local-port")) {
@@ -549,8 +549,13 @@ int main(int argc, char **argv)
     DynListener::registerFunc("VERSION",&DLVersionHandler, "get instance version");
     DynListener::registerFunc("PURGE",&DLPurgeHandler, "purge entries from packet cache", "[<record>]");
     DynListener::registerFunc("CCOUNTS",&DLCCHandler, "get cache statistics");
+    DynListener::registerFunc("QTYPES", &DLQTypesHandler, "get QType statistics");
+    DynListener::registerFunc("RESPSIZES", &DLRSizesHandler, "get histogram of response sizes");
+    DynListener::registerFunc("REMOTES", &DLRemotesHandler, "get top remotes");
     DynListener::registerFunc("SET",&DLSettingsHandler, "set config variables", "<var> <value>");
     DynListener::registerFunc("RETRIEVE",&DLNotifyRetrieveHandler, "retrieve slave domain", "<domain>");
+    DynListener::registerFunc("CURRENT-CONFIG",&DLCurrentConfigHandler, "Retrieve the current configuration");
+    DynListener::registerFunc("LIST-ZONES",&DLListZones, "show list of zones", "[master|slave|native]");
 
     if(!::arg()["tcp-control-address"].empty()) {
       DynListener* dlTCP=new DynListener(ComboAddress(::arg()["tcp-control-address"], ::arg().asNum("tcp-control-port")));
@@ -587,7 +592,7 @@ int main(int argc, char **argv)
   try {
     mainthread();
   }
-  catch(AhuException &AE) {
+  catch(PDNSException &AE) {
     if(!::arg().mustDo("daemon"))
       cerr<<"Exiting because: "<<AE.reason<<endl;
     L<<Logger::Error<<"Exiting because: "<<AE.reason<<endl;

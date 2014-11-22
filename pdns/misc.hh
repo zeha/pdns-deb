@@ -5,7 +5,11 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -51,17 +55,11 @@ struct TSCTimer
 
 #include "utility.hh"
 #include "dns.hh"
-#ifndef WIN32
-# include <sys/time.h>
-# include <sys/types.h>
-# include <sys/socket.h>
-# include <time.h>
-# include <syslog.h>
-#else
-# define WINDOWS_LEAN_AND_MEAN
-# include <windows.h>
-# include "utility.hh"
-#endif // WIN32
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <time.h>
+#include <syslog.h>
 #include <deque>
 #include <stdexcept>
 #include <string>
@@ -126,6 +124,11 @@ stringtok (Container &container, string const &in,
   }
 }
 
+template<typename T> bool rfc1982LessThan(T a, T b)
+{
+  return ((signed)(a - b)) < 0;
+}
+
 // fills container with ranges, so {posbegin,posend}
 template <typename Container>
 void
@@ -158,7 +161,7 @@ vstringtok (Container &container, string const &in,
 
 int writen2(int fd, const void *buf, size_t count);
 inline int writen2(int fd, const std::string &s) { return writen2(fd, s.data(), s.size()); }
-
+int readn2(int fd, void* buffer, unsigned int len);
 
 const string toLower(const string &upper);
 const string toLowerCanonic(const string &upper);
@@ -168,6 +171,7 @@ string stringerror();
 string netstringerror();
 string itoa(int i);
 string uitoa(unsigned int i);
+string bitFlip(const string &str);
 
 void dropPrivs(int uid, int gid);
 int makeGidNumeric(const string &group);
@@ -196,8 +200,6 @@ public:
 private:
   struct timeval d_set;
 };
-
-int sendData(const char *buffer, int replen, int outsock);
 
 inline void DTime::set()
 {
@@ -306,36 +308,45 @@ inline bool operator<(const struct timeval& lhs, const struct timeval& rhs)
 }
 
 inline bool pdns_ilexicographical_compare(const std::string& a, const std::string& b)  __attribute__((pure));
-inline bool pdns_ilexicographical_compare(const std::string& a, const std::string& b) 
+inline bool pdns_ilexicographical_compare(const std::string& a, const std::string& b)
 {
-  string::size_type aLen = a.length(), bLen = b.length(), n;
   const unsigned char *aPtr = (const unsigned char*)a.c_str(), *bPtr = (const unsigned char*)b.c_str();
-  int result;
-  
-  for(n = 0 ; n < aLen && n < bLen ; ++n) {
-      if((result = dns_tolower(*aPtr++) - dns_tolower(*bPtr++))) {
-        return result < 0;
-      }
+  const unsigned char *aEptr = aPtr + a.length(), *bEptr = bPtr + b.length();
+  while(aPtr != aEptr && bPtr != bEptr) {
+    if ((*aPtr != *bPtr) && (dns_tolower(*aPtr) - dns_tolower(*bPtr)))
+      return (dns_tolower(*aPtr) - dns_tolower(*bPtr)) < 0;
+    aPtr++;
+    bPtr++;
   }
-  if(n == aLen && n == bLen) // strings are equal (in length)
-    return 0; 
-  if(n == aLen) // first string was shorter
-    return true; 
-  return false;
+  if(aPtr == aEptr && bPtr == bEptr) // strings are equal (in length)
+    return false;
+  return aPtr == aEptr; // true if first string was shorter
 }
 
 inline bool pdns_iequals(const std::string& a, const std::string& b) __attribute__((pure));
-
-inline bool pdns_iequals(const std::string& a, const std::string& b) 
+inline bool pdns_iequals(const std::string& a, const std::string& b)
 {
-  string::size_type aLen = a.length(), bLen = b.length(), n;
+  if (a.length() != b.length())
+    return false;
+
   const char *aPtr = a.c_str(), *bPtr = b.c_str();
-  
-  for(n = 0 ; n < aLen && n < bLen ; ++n) {
-      if(dns_tolower(*aPtr++) != dns_tolower(*bPtr++))
-        return false;
+  const char *aEptr = aPtr + a.length();
+  while(aPtr != aEptr) {
+    if((*aPtr != *bPtr) && (dns_tolower(*aPtr) != dns_tolower(*bPtr)))
+      return false;
+    aPtr++;
+    bPtr++;
   }
-  return aLen == bLen; // strings are equal (in length)
+  return true;
+}
+
+inline bool pdns_iequals_ch(const char a, const char b) __attribute__((pure));
+inline bool pdns_iequals_ch(const char a, const char b)
+{
+  if ((a != b) && (dns_tolower(a) != dns_tolower(b)))
+    return false;
+
+  return true;
 }
 
 // lifted from boost, with thanks
@@ -355,7 +366,6 @@ public:
       return atomic_exchange_and_add( &value_, +1 );
     }
 
-
     unsigned int operator--()
     {
       return atomic_exchange_and_add( &value_, -1 ) - 1;
@@ -366,10 +376,11 @@ public:
       return atomic_exchange_and_add( &value_, 0);
     }
 
-private:
-    AtomicCounter(AtomicCounter const &);
-    AtomicCounter &operator=(AtomicCounter const &);
+    AtomicCounter(AtomicCounter const &rhs) : value_(rhs)
+    {
+    }
 
+private:
     mutable unsigned int value_;
     
     // the below is necessary because __sync_fetch_and_add is not universally available on i386.. I 3> RHEL5. 
@@ -438,6 +449,17 @@ struct CIStringPairCompare: public std::binary_function<pair<string, uint16_t>, 
   }
 };
 
+inline size_t pdns_ci_find(const string& haystack, const string& needle)
+{
+  string::const_iterator it = std::search(haystack.begin(), haystack.end(),
+    needle.begin(), needle.end(), pdns_iequals_ch);
+  if (it == haystack.end()) {
+    // not found
+    return string::npos;
+  } else {
+    return it - haystack.begin();
+  }
+}
 
 pair<string, string> splitField(const string& inp, char sepa);
 
@@ -462,19 +484,14 @@ inline string toCanonic(const string& zone, const string& domain)
   return ret;
 }
 
-inline void setSocketReusable(int fd)
-{
-  int tmp=1;
-  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char*)&tmp, static_cast<unsigned>(sizeof tmp));
-}
-
 string stripDot(const string& dom);
 void seedRandom(const string& source);
 string makeRelative(const std::string& fqdn, const std::string& zone);
 string labelReverse(const std::string& qname);
 std::string dotConcat(const std::string& a, const std::string &b);
 int makeIPv6sockaddr(const std::string& addr, struct sockaddr_in6* ret);
-int makeIPv4sockaddr(const string &str, struct sockaddr_in* ret);
+int makeIPv4sockaddr(const std::string& str, struct sockaddr_in* ret);
+int makeUNsockaddr(const std::string& path, struct sockaddr_un* ret);
 bool stringfgets(FILE* fp, std::string& line);
 
 template<typename Index>
@@ -507,4 +524,11 @@ private:
   regex_t d_preg;
 };
 
+union ComboAddress;
+void addCMsgSrcAddr(struct msghdr* msgh, void* cmsgbuf, ComboAddress* source);
+
+unsigned int getFilenumLimit(bool hardOrSoft=0);
+void setFilenumLimit(unsigned int lim);
+bool readFileIfThere(const char* fname, std::string* line);
+uint32_t burtle(const unsigned char* k, uint32_t lengh, uint32_t init);
 #endif

@@ -14,34 +14,29 @@ try
   bool recurse=false;
   bool tcp=false;
   bool showflags=false;
+  bool hidesoadetails=false;
 
   reportAllTypes();
 
   if(argc < 5) {
-    cerr<<"Syntax: sdig IP-address port question question-type [dnssec|dnssec-tcp|recurse] [showflags]\n";
+    cerr<<"Syntax: sdig IP-address port question question-type [dnssec] [recurse] [showflags] [hidesoadetails] [tcp]\n";
     exit(EXIT_FAILURE);
   }
 
-  // FIXME: turn recurse and dnssec into proper flags or something
-  if(argc > 5 && strcmp(argv[5], "dnssec")==0)
-  {
-    dnssec=true;
-  }
-  
-  if(argc > 5 && strcmp(argv[5], "dnssec-tcp")==0)
-  {
-    dnssec=true;
-    tcp=true;
-  }
-
-  if(argc > 5 && strcmp(argv[5], "recurse")==0)
-  {
-    recurse=true;
-  }
-
-  if((argc > 5 && strcmp(argv[5], "showflags")==0) || (argc > 6 && strcmp(argv[6], "showflags")==0))
-  {
-    showflags=true;
+  if (argc > 5) {
+    for(int i=5; i<argc; i++) {
+      if (strcmp(argv[i], "dnssec") == 0)
+        dnssec=true;
+      if (strcmp(argv[i], "recurse") == 0)
+        recurse=true;
+      if (strcmp(argv[i], "showflags") == 0)
+        showflags=true;
+      if (strcmp(argv[i], "hidesoadetails") == 0)
+        hidesoadetails=true;
+      if (strcmp(argv[i], "tcp") == 0) {
+        tcp=true;
+      }
+    }
   }
 
   vector<uint8_t> packet;
@@ -89,18 +84,18 @@ try
   string reply;
 
   if(tcp) {
-    Socket sock(InterNetwork, Stream);
+    Socket sock(AF_INET, SOCK_STREAM);
     ComboAddress dest(argv[1] + (*argv[1]=='@'), atoi(argv[2]));
     sock.connect(dest);
     uint16_t len;
     len = htons(packet.size());
     if(sock.write((char *) &len, 2) != 2)
-      throw AhuException("tcp write failed");
+      throw PDNSException("tcp write failed");
 
     sock.writen(string((char*)&*packet.begin(), (char*)&*packet.end()));
     
     if(sock.read((char *) &len, 2) != 2)
-      throw AhuException("tcp read failed");
+      throw PDNSException("tcp read failed");
 
     len=ntohs(len);
     char *creply = new char[len];
@@ -109,7 +104,7 @@ try
     while(n<len) {
       numread=sock.read(creply+n, len-n);
       if(numread<0)
-        throw AhuException("tcp read failed");
+        throw PDNSException("tcp read failed");
       n+=numread;
     }
 
@@ -118,7 +113,7 @@ try
   }
   else //udp
   {
-    Socket sock(InterNetwork, Datagram);
+    Socket sock(AF_INET, SOCK_DGRAM);
     ComboAddress dest(argv[1] + (*argv[1]=='@'), atoi(argv[2]));
     sock.sendTo(string((char*)&*packet.begin(), (char*)&*packet.end()), dest);
     
@@ -154,6 +149,13 @@ try
       vector<string> parts;
       stringtok(parts, zoneRep);
       cout<<"\t"<<i->first.d_ttl<<"\t"<< parts[0]<<" "<<parts[1]<<" "<<parts[2]<<" ...\n";
+    }
+    else if (i->first.d_type == QType::SOA && hidesoadetails)
+    {
+      string zoneRep = i->first.d_content->getZoneRepresentation();
+      vector<string> parts;
+      stringtok(parts, zoneRep);
+      cout<<"\t"<<i->first.d_ttl<<"\t"<<parts[0]<<" "<<parts[1]<<" [serial] "<<parts[3]<<" "<<parts[4]<<" "<<parts[5]<<" "<<parts[6]<<"\n";
     }
     else
     {

@@ -9,12 +9,17 @@
 #include <boost/algorithm/string.hpp>
 #include "dnssecinfra.hh" 
 #include "dnsseckeeper.hh"
+#include <polarssl/md5.h>
 #include <polarssl/sha1.h>
 #include <boost/assign/std/vector.hpp> // for 'operator+=()'
 #include <boost/assign/list_inserter.hpp>
 #include "base64.hh"
-#include "md5.hh"
+#include "sha.hh"
 #include "namespaces.hh"
+#ifdef HAVE_P11KIT1
+#include "pkcs11signers.hh"
+#endif
+
 using namespace boost::assign;
 
 DNSCryptoKeyEngine* DNSCryptoKeyEngine::makeFromISCFile(DNSKEYRecordContent& drc, const char* fname)
@@ -34,6 +39,7 @@ DNSCryptoKeyEngine* DNSCryptoKeyEngine::makeFromISCFile(DNSKEYRecordContent& drc
 
 DNSCryptoKeyEngine* DNSCryptoKeyEngine::makeFromISCString(DNSKEYRecordContent& drc, const std::string& content)
 {
+  bool pkcs11=false;
   int algorithm = 0;
   string sline, key, value, raw;
   std::istringstream str(content);
@@ -46,6 +52,20 @@ DNSCryptoKeyEngine* DNSCryptoKeyEngine::makeFromISCString(DNSKEYRecordContent& d
       algorithm = atoi(value.c_str());
       stormap["algorithm"]=lexical_cast<string>(algorithm);
       continue;
+    } else if (pdns_iequals(key,"pin")) {
+      stormap["pin"]=value;
+      continue;
+    } else if (pdns_iequals(key,"engine")) {
+      stormap["engine"]=value;
+      pkcs11=true;
+      continue;
+    } else if (pdns_iequals(key,"slot")) {
+      int slot = atoi(value.c_str());
+      stormap["slot"]=lexical_cast<string>(slot);
+      continue;
+    }  else if (pdns_iequals(key,"label")) {
+      stormap["label"]=value;
+      continue;
     }
     else if(pdns_iequals(key, "Private-key-format"))
       continue;
@@ -53,7 +73,17 @@ DNSCryptoKeyEngine* DNSCryptoKeyEngine::makeFromISCString(DNSKEYRecordContent& d
     B64Decode(value, raw);
     stormap[toLower(key)]=raw;
   }
-  DNSCryptoKeyEngine* dpk=make(algorithm);
+  DNSCryptoKeyEngine* dpk;
+
+  if (pkcs11) {
+#ifdef HAVE_P11KIT1
+    dpk = PKCS11DNSCryptoKeyEngine::maker(algorithm); 
+#else
+    throw PDNSException("Cannot load PKCS#11 key without support for it");
+#endif
+  } else {
+    dpk=make(algorithm);
+  }
   dpk->fromISCMap(drc, stormap);
   return dpk;
 }
@@ -65,7 +95,9 @@ std::string DNSCryptoKeyEngine::convertToISC() const
   ostringstream ret;
   ret<<"Private-key-format: v1.2\n";
   BOOST_FOREACH(const stormap_t::value_type& value, stormap) {
-    if(value.first != "Algorithm") 
+    if(value.first != "Algorithm" && value.first != "PIN" && 
+       value.first != "Slot" && value.first != "Engine" &&
+       value.first != "Label") 
       ret<<value.first<<": "<<Base64Encode(value.second)<<"\n";
     else
       ret<<value.first<<": "<<value.second<<"\n";
@@ -167,6 +199,19 @@ pair<unsigned int, unsigned int> DNSCryptoKeyEngine::testMakers(unsigned int alg
         algorithm = atoi(value.c_str());
         stormap["algorithm"]=lexical_cast<string>(algorithm);
         continue;
+      } else if (pdns_iequals(key,"pin")) {
+        stormap["pin"]=value;
+        continue;
+      } else if (pdns_iequals(key,"engine")) {
+        stormap["engine"]=value;
+        continue;
+      } else if (pdns_iequals(key,"slot")) {
+        int slot = atoi(value.c_str());
+        stormap["slot"]=lexical_cast<string>(slot);
+        continue;
+      }  else if (pdns_iequals(key,"label")) {
+        stormap["label"]=value;
+        continue;
       }
       else if(pdns_iequals(key, "Private-key-format"))
         continue;
@@ -261,7 +306,6 @@ DSRecordContent makeDSFromDNSKey(const std::string& qname, const DNSKEYRecordCon
   string toHash;
   toHash.assign(toLower(simpleCompress(qname)));
   toHash.append(const_cast<DNSKEYRecordContent&>(drc).serialize("", true, true));
-
   
   DSRecordContent dsrc;
   if(digest==1) {
@@ -281,11 +325,12 @@ DSRecordContent makeDSFromDNSKey(const std::string& qname, const DNSKEYRecordCon
     dsrc.d_digest = dpk->hash(toHash);
   }
   else 
-    throw std::runtime_error("Asked to a DS of unkown digest type " + lexical_cast<string>(digest)+"\n");
+    throw std::runtime_error("Asked to a DS of unknown digest type " + lexical_cast<string>(digest)+"\n");
   
   dsrc.d_algorithm= drc.d_algorithm;
   dsrc.d_digesttype=digest;
   dsrc.d_tag=const_cast<DNSKEYRecordContent&>(drc).getTag();
+
   return dsrc;
 }
 
@@ -293,25 +338,29 @@ DSRecordContent makeDSFromDNSKey(const std::string& qname, const DNSKEYRecordCon
 DNSKEYRecordContent makeDNSKEYFromDNSCryptoKeyEngine(const DNSCryptoKeyEngine* pk, uint8_t algorithm, uint16_t flags)
 {
   DNSKEYRecordContent drc;
-  
+
   drc.d_protocol=3;
   drc.d_algorithm = algorithm;
 
   drc.d_flags=flags;
   drc.d_key = pk->getPublicKeyString();
+
   return drc;
 }
 
 int countLabels(const std::string& signQName)
 {
-  int count =1;
-  for(string::const_iterator pos = signQName.begin(); pos != signQName.end() ; ++pos) 
-    if(*pos == '.' && pos+1 != signQName.end()) 
-      count++;
+  if(!signQName.empty()) {
+    int count=1;
+    for(string::const_iterator pos = signQName.begin(); pos != signQName.end() ; ++pos)
+      if(*pos == '.' && pos+1 != signQName.end())
+        count++;
 
-  if(boost::starts_with(signQName, "*."))
-    count--;
-  return count;
+    if(boost::starts_with(signQName, "*."))
+      count--;
+    return count;
+  }
+  return 0;
 }
 
 uint32_t getStartOfWeek()
@@ -420,38 +469,66 @@ void decodeDERIntegerSequence(const std::string& input, vector<string>& output)
   }  
 }
 
-string calculateMD5HMAC(const std::string& key_, const std::string& text)
+string calculateMD5HMAC(const std::string& key, const std::string& text)
 {
-  string key__ = key_;
-  if (key__.size() > 64)
-    key__ = pdns_md5sum(key_);
+  std::string res;
+  unsigned char hash[16];
 
-  const unsigned char* key=(const unsigned char*)key__.c_str();
-  unsigned char keyIpad[64];
-  unsigned char keyOpad[64];
+  md5_hmac(reinterpret_cast<const unsigned char*>(key.c_str()), key.size(), reinterpret_cast<const unsigned char*>(text.c_str()), text.size(), hash);
+  res.assign(reinterpret_cast<const char*>(hash), 16);
 
-  //~ cerr<<"Key: "<<makeHexDump(key_)<<endl;
-  //~ cerr<<"txt: "<<makeHexDump(text)<<endl;
+  return res;
+}
 
-  for(unsigned int n=0; n < 64; ++n) {
-    if(n < key_.length()) {
-      keyIpad[n] = (unsigned char)(key[n] ^ 0x36);
-      keyOpad[n] = (unsigned char)(key[n] ^ 0x5c);
-    }
-    else  {
-      keyIpad[n]=0x36;
-      keyOpad[n]=0x5c;
-    }
-  }
+string calculateSHAHMAC(const std::string& key, const std::string& text, TSIGHashEnum hasher)
+{
+  std::string res;
+  unsigned char hash[64];
 
-  MD5Summer md5_1, md5_2;
-  md5_1.feed((const char*)keyIpad, 64);
-  md5_1.feed(text);
+  switch(hasher) {
+  case TSIG_SHA1:
+  {
+      sha1_hmac(reinterpret_cast<const unsigned char*>(key.c_str()), key.size(), reinterpret_cast<const unsigned char*>(text.c_str()), text.size(), hash);
+      res.assign(reinterpret_cast<const char*>(hash), 20);
+      break;
+  };
+  case TSIG_SHA224:
+  {
+      sha2_hmac(reinterpret_cast<const unsigned char*>(key.c_str()), key.size(), reinterpret_cast<const unsigned char*>(text.c_str()), text.size(), hash, 1);
+      res.assign(reinterpret_cast<const char*>(hash), 28);
+      break;
+  };
+  case TSIG_SHA256:
+  {
+      sha2_hmac(reinterpret_cast<const unsigned char*>(key.c_str()), key.size(), reinterpret_cast<const unsigned char*>(text.c_str()), text.size(), hash, 0);
+      res.assign(reinterpret_cast<const char*>(hash), 32);
+      break;
+  };
+  case TSIG_SHA384:
+  {
+      sha4_hmac(reinterpret_cast<const unsigned char*>(key.c_str()), key.size(), reinterpret_cast<const unsigned char*>(text.c_str()), text.size(), hash, 1);
+      res.assign(reinterpret_cast<const char*>(hash), 48);
+      break;
+  };
+  case TSIG_SHA512:
+  {
+      sha4_hmac(reinterpret_cast<const unsigned char*>(key.c_str()), key.size(), reinterpret_cast<const unsigned char*>(text.c_str()), text.size(), hash, 0);
+      res.assign(reinterpret_cast<const char*>(hash), 64);
+      break;
+  };
+  default:
+    throw new PDNSException("Unknown hash algorithm requested for SHA");
+  };
 
-  md5_2.feed((const char*)keyOpad, 64);
-  md5_2.feed(md5_1.get());
+  return res;
+}
 
-  return md5_2.get();
+string calculateHMAC(const std::string& key, const std::string& text, TSIGHashEnum hash) {
+  if (hash == TSIG_MD5) return calculateMD5HMAC(key, text);
+
+  // add other algorithms here
+
+  return calculateSHAHMAC(key, text, hash);
 }
 
 string makeTSIGMessageFromTSIGPacket(const string& opacket, unsigned int tsigOffset, const string& keyname, const TSIGRecordContent& trc, const string& previous, bool timersonly, unsigned int dnsHeaderOffset)
@@ -462,10 +539,17 @@ string makeTSIGMessageFromTSIGPacket(const string& opacket, unsigned int tsigOff
   packet.resize(tsigOffset); // remove the TSIG record at the end as per RFC2845 3.4.1
   packet[(dnsHeaderOffset + sizeof(struct dnsheader))-1]--; // Decrease ARCOUNT because we removed the TSIG RR in the previous line.
   
+
+  // Replace the message ID with the original message ID from the TSIG record.
+  // This is needed for forwarded DNS Update as they get a new ID when forwarding (section 6.1 of RFC2136). The TSIG record stores the original ID and the
+  // signature was created with the original ID, so we replace it here to get the originally signed message.
+  // If the message is not forwarded, we simply override it with the same id.
+  uint16_t origID = htons(trc.d_origID);
+  packet.replace(0, 2, (char*)&origID, 2);
+
   if(!previous.empty()) {
     uint16_t len = htons(previous.length());
     message.append((char*)&len, 2);
-    
     message.append(previous);
   }
   
@@ -475,9 +559,9 @@ string makeTSIGMessageFromTSIGPacket(const string& opacket, unsigned int tsigOff
   DNSPacketWriter dw(signVect, "", 0);
   if(!timersonly) {
     dw.xfrLabel(keyname, false);
-    dw.xfr16BitInt(0xff); // class
+    dw.xfr16BitInt(QClass::ANY); // class
     dw.xfr32BitInt(0);    // TTL
-    dw.xfrLabel(trc.d_algoName, false); 
+    dw.xfrLabel(toLower(trc.d_algoName), false);
   }
   
   uint32_t now = trc.d_time; 
@@ -493,11 +577,36 @@ string makeTSIGMessageFromTSIGPacket(const string& opacket, unsigned int tsigOff
   return message;
 }
 
+
+bool getTSIGHashEnum(const string &algoName, TSIGHashEnum& algoEnum)
+{
+  string normalizedName = toLowerCanonic(algoName);
+
+  if (normalizedName == "hmac-md5.sig-alg.reg.int")
+    algoEnum = TSIG_MD5;
+  else if (normalizedName == "hmac-sha1")
+    algoEnum = TSIG_SHA1;
+  else if (normalizedName == "hmac-sha224")
+    algoEnum = TSIG_SHA224;
+  else if (normalizedName == "hmac-sha256")
+    algoEnum = TSIG_SHA256;
+  else if (normalizedName == "hmac-sha384")
+    algoEnum = TSIG_SHA384;
+  else if (normalizedName == "hmac-sha512")
+    algoEnum = TSIG_SHA512;
+  else {
+     return false;
+  }
+  return true;
+}
+
+
 void addTSIG(DNSPacketWriter& pw, TSIGRecordContent* trc, const string& tsigkeyname, const string& tsigsecret, const string& tsigprevious, bool timersonly)
 {
-  if (trc->d_algoName != "hmac-md5.sig-alg.reg.int.") {
-    L<<Logger::Error<<"Unsupported HMAC TSIG algorithm " << trc->d_algoName << endl;
-    return;
+  TSIGHashEnum algo;
+  if (!getTSIGHashEnum(trc->d_algoName, algo)) {
+     L<<Logger::Error<<"Unsupported TSIG HMAC algorithm " << trc->d_algoName << endl;
+     return;
   }
 
   string toSign;
@@ -514,7 +623,7 @@ void addTSIG(DNSPacketWriter& pw, TSIGRecordContent* trc, const string& tsigkeyn
   DNSPacketWriter dw(signVect, "", 0);
   if(!timersonly) {
     dw.xfrLabel(tsigkeyname, false);
-    dw.xfr16BitInt(0xff); // class
+    dw.xfr16BitInt(QClass::ANY); // class
     dw.xfr32BitInt(0);    // TTL
     dw.xfrLabel(trc->d_algoName, false);
   }  
@@ -531,9 +640,10 @@ void addTSIG(DNSPacketWriter& pw, TSIGRecordContent* trc, const string& tsigkeyn
   const vector<uint8_t>& signRecord=dw.getRecordBeingWritten();
   toSign.append(&*signRecord.begin(), &*signRecord.end());
 
-  trc->d_mac = calculateMD5HMAC(tsigsecret, toSign);
+  trc->d_mac = calculateHMAC(tsigsecret, toSign, algo);
   //  d_trc->d_mac[0]++; // sabotage
-  pw.startRecord(tsigkeyname, QType::TSIG, 0, 0xff, DNSPacketWriter::ADDITIONAL, false);
+  pw.startRecord(tsigkeyname, QType::TSIG, 0, QClass::ANY, DNSPacketWriter::ADDITIONAL, false);
   trc->toPacket(pw);
   pw.commit();
 }
+

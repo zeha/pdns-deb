@@ -5,7 +5,10 @@
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License version 2
     as published by the Free Software Foundation
-    
+
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,6 +26,7 @@
 #include "logger.hh"
 
 #include <sys/types.h>
+#include <pdns/packetcache.hh>
 #include "dnspacket.hh"
 #include "dns.hh"
 
@@ -38,6 +42,31 @@ bool DNSBackend::getRemote(DNSPacket *p, struct sockaddr *sa, Utility::socklen_t
   *len=p->d_remote.getSocklen();
   memcpy(sa,&p->d_remote,*len);
   return true;
+}
+
+bool DNSBackend::getAuth(DNSPacket *p, SOAData *sd, const string &target, int *zoneId, const int best_match_len)
+{
+  bool found=false;
+  string subdomain(target);
+  do {
+    if( best_match_len >= (int)subdomain.length() )
+      break;
+
+    if( this->getSOA( subdomain, *sd, p ) ) {
+      sd->qname = subdomain;
+      if(zoneId)
+        *zoneId = sd->domain_id;
+
+      if(p->qtype.getCode() == QType::DS && pdns_iequals(subdomain, target)) {
+        // Found authoritative zone but look for parent zone with 'DS' record.
+        found=true;
+      } else
+        return true;
+    }
+  }
+  while( chopOff( subdomain ) );   // 'www.powerdns.org' -> 'powerdns.org' -> 'org' -> ''
+
+  return found;
 }
 
 void DNSBackend::setArgPrefix(const string &prefix)
@@ -96,7 +125,6 @@ vector<string> BackendMakerClass::getModules()
 void BackendMakerClass::load_all()
 {
   // TODO: Implement this?
-#ifndef WIN32
   DIR *dir=opendir(arg()["module-dir"].c_str());
   if(!dir) {
     L<<Logger::Error<<"Unable to open module directory '"<<arg()["module-dir"]<<"'"<<endl;
@@ -110,7 +138,6 @@ void BackendMakerClass::load_all()
       load(entry->d_name);
   }
   closedir(dir);
-#endif // WIN32
 }
 
 void BackendMakerClass::load(const string &module)
@@ -168,7 +195,7 @@ vector<DNSBackend *>BackendMakerClass::all(bool metadataOnly)
 {
   vector<DNSBackend *>ret;
   if(d_instances.empty())
-    throw AhuException("No database backends configured for launch, unable to function");
+    throw PDNSException("No database backends configured for launch, unable to function");
 
   try {
     for(vector<pair<string,string> >::const_iterator i=d_instances.begin();i!=d_instances.end();++i) {
@@ -178,12 +205,12 @@ vector<DNSBackend *>BackendMakerClass::all(bool metadataOnly)
       else 
         made = d_repository[i->first]->make(i->second);
       if(!made)
-        throw AhuException("Unable to launch backend '"+i->first+"'");
+        throw PDNSException("Unable to launch backend '"+i->first+"'");
 
       ret.push_back(made);
     }
   }
-  catch(AhuException &ae) {
+  catch(PDNSException &ae) {
     L<<Logger::Error<<"Caught an exception instantiating a backend: "<<ae.reason<<endl;
     L<<Logger::Error<<"Cleaning up"<<endl;
     for(vector<DNSBackend *>::const_iterator i=ret.begin();i!=ret.end();++i)
@@ -201,7 +228,7 @@ vector<DNSBackend *>BackendMakerClass::all(bool metadataOnly)
 }
 
 /** getSOA() is a function that is called to get the SOA of a domain. Callers should ONLY
-    use getSOA() and no perform a lookup() themselves as backends may decide to special case
+    use getSOA() and not perform a lookup() themselves as backends may decide to special case
     the SOA record.
     
     Returns false if there is definitely no SOA for the domain. May throw a DBException
@@ -305,7 +332,153 @@ bool DNSBackend::calculateSOASerial(const string& domain, const SOAData& sd, tim
         newest=i.last_modified;
     }
 
-    serial=newest; // +arg().asNum("soa-serial-offset");
+    serial=newest;
 
+    return true;
+}
+
+/* This is a subclass of DNSBackend that, assuming you have your zones reversed
+ * and stored in an ordered fashion, will be able to look up SOA's much quicker
+ * than the DNSBackend code. The normal case for a SOA that exists is 1 backend
+ * query no matter how much the depth (although if there are sub-SOA's then
+ * this could require one or two more queries). The normal case for an SOA that
+ * does not exist is 2 or 3 queries depending on the system, although this will
+ * be reduced if the negative cache is active.
+ *
+ * The subclass MUST implement bool getAuthZone(string &reversed_zone_name)
+ * which, given a reversed zone name will return false if there was some sort
+ * of error (eg no record found as top of database was hit, lookup issues),
+ * otherwise returns true and sets reversed_zone_name to be the exact entry
+ * found, otherwise the entry directly preceding where it would be.
+ *
+ * The subclass MUST implement getAuthData( const string &rev_zone_name, SOAData *soa )
+ * which is basically the same as getSOA() but is called with the reversed zone name
+ */
+enum {
+    GET_AUTH_NEG_DONTCACHE, // not found but don't cache this fact
+    GET_AUTH_NEG_CACHE,     // not found and negcache this
+    GET_AUTH_SUCCESS,       // entry found
+};
+
+#undef PC
+extern PacketCache PC;
+
+#if 0
+#undef DLOG
+#define DLOG(x) x
+#endif
+
+bool _add_to_negcache( const string &zone ) {
+    static int negqueryttl=::arg().asNum("negquery-cache-ttl");
+    // add the zone to the negative query cache and return false
+    if(negqueryttl) {
+        DLOG(L<<Logger::Error<<"Adding to neg qcache: " << zone<<endl);
+        PC.insert(zone, QType(QType::SOA), PacketCache::QUERYCACHE, "", negqueryttl, 0);
+    }
+    return false;
+}
+
+inline int DNSReversedBackend::_getAuth(DNSPacket *p, SOAData *soa, const string &inZone, int *zoneId, const string &querykey, const int best_match_len) {
+    static int negqueryttl=::arg().asNum("negquery-cache-ttl");
+
+    DLOG(L<<Logger::Error<<"SOA Query: " <<querykey<<endl);
+
+    /* Got a match from a previous backend that was longer than this - no need
+     * to continue. This is something of an optimization as we would hit the
+     * similar test below in any cases that this was hit, although we would run
+     * the risk of something being added to the neg-querycache that may
+     * interfear with future queries
+     */
+    if( best_match_len >= (int)querykey.length() ) {
+        DLOG(L<<Logger::Error<<"Best match was better from a different client"<<endl);
+        return GET_AUTH_NEG_DONTCACHE;
+    }
+
+    /* Look up in the negative querycache to see if we have already tried and
+     * failed to look up this zone */
+    if( negqueryttl ) {
+        string content;
+        bool ret = PC.getEntry( inZone, QType(QType::SOA), PacketCache::QUERYCACHE, content, 0 );
+        if( ret && content.empty() ) {
+            DLOG(L<<Logger::Error<<"Found in neg qcache: " << inZone << ":" << content << ":" << ret << ":"<<endl);
+            return GET_AUTH_NEG_DONTCACHE;
+        }
+    }
+
+    /* Find the SOA entry on- or before- the position that we want in the b-tree */
+    string foundkey = querykey;
+    if( !getAuthZone( foundkey ) )
+        return GET_AUTH_NEG_CACHE;
+
+    DLOG(L<<Logger::Error<<"Queried: " << querykey << " and found record: " <<foundkey<<endl);
+
+    // Got a match from a previous backend that was longer than this - no need
+    // to continue.
+    if( best_match_len && best_match_len >= (int) foundkey.length() ) {
+        DLOG(L<<Logger::Error<<"Best match was better from a different client"<<endl);
+        return GET_AUTH_NEG_DONTCACHE;
+    }
+
+    // Found record successfully now, fill in the data.
+    if( getAuthData( *soa, p ) ) {
+        /* all the keys are reversed. rather than reversing them again it is
+         * presumably quicker to just substring the zone down to size */
+        soa->qname = inZone.substr( inZone.length() - foundkey.length(), string::npos );
+        if(zoneId)
+            *zoneId = soa->domain_id;
+
+        DLOG(L<<Logger::Error<<"Successfully got record: " <<foundkey << " : " << querykey.substr( 0, foundkey.length() ) << " : " << soa->qname<<endl);
+
+        return GET_AUTH_SUCCESS;
+    }
+
+    return GET_AUTH_NEG_CACHE;
+}
+
+bool DNSReversedBackend::getAuth(DNSPacket *p, SOAData *soa, const string &inZone, int *zoneId, const int best_match_len) {
+    // Reverse the lowercased query string
+    string zone = toLower(inZone);
+    string querykey = labelReverse(zone);
+
+    int ret = _getAuth( p, soa, inZone, zoneId, querykey, best_match_len );
+
+    /* If this is disabled then we would just cache the tree structure not the
+     * leaves which should give the best performance and a nice small negcache
+     * size
+     */
+    if( ret == GET_AUTH_NEG_CACHE )
+        _add_to_negcache( inZone );
+
+    return ret == GET_AUTH_SUCCESS;
+}
+
+/* getAuthData() is very similar to getSOA() so implement a default getSOA
+ * based on that. This will only be called very occasionally for example during
+ * an AXFR */
+bool DNSReversedBackend::_getSOA(const string &querykey, SOAData &soa, DNSPacket *p)
+{
+    string searchkey( querykey );
+
+    if( !getAuthZone( searchkey ) )
+        return false;
+
+    DLOG(L<<Logger::Error<<"search key " << searchkey << " query key " << querykey<<endl);
+
+    if( querykey.compare( searchkey ) != 0 )
+        return false;
+
+    return getAuthData( soa, p );
+}
+
+bool DNSReversedBackend::getSOA(const string &inZone, SOAData &soa, DNSPacket *p)
+{
+    // prepare the query string
+    string zone = toLower( inZone );
+    string querykey = labelReverse( zone );
+
+    if( !_getSOA( querykey, soa, p ) )
+        return false;
+
+    soa.qname = inZone;
     return true;
 }

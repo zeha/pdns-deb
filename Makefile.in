@@ -54,14 +54,38 @@ host_triplet = @host@
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
-	$(top_srcdir)/configure AUTHORS COPYING INSTALL NEWS TODO \
-	compile config.guess config.sub depcomp install-sh ltmain.sh \
-	missing ylwrap
+	$(top_srcdir)/configure AUTHORS COPYING INSTALL NEWS \
+	build-aux/compile build-aux/config.guess build-aux/config.sub \
+	build-aux/depcomp build-aux/install-sh build-aux/ltmain.sh \
+	build-aux/missing build-aux/ylwrap
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/boost.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/m4/pdns_check_cdb.m4 \
+	$(top_srcdir)/m4/pdns_check_ldap.m4 \
+	$(top_srcdir)/m4/pdns_check_opendbx.m4 \
+	$(top_srcdir)/m4/pdns_check_ragel.m4 \
+	$(top_srcdir)/m4/pdns_d_fortify_source.m4 \
+	$(top_srcdir)/m4/pdns_enable_botan.m4 \
+	$(top_srcdir)/m4/pdns_enable_p11kit.m4 \
+	$(top_srcdir)/m4/pdns_enable_remotebackend_zeromq.m4 \
+	$(top_srcdir)/m4/pdns_enable_unit_tests.m4 \
+	$(top_srcdir)/m4/pdns_enable_verbose_logging.m4 \
+	$(top_srcdir)/m4/pdns_param_ssp_buffer_size.m4 \
+	$(top_srcdir)/m4/pdns_pie.m4 $(top_srcdir)/m4/pdns_relro.m4 \
+	$(top_srcdir)/m4/pdns_stack_protector.m4 \
+	$(top_srcdir)/m4/pdns_with_cryptopp.m4 \
+	$(top_srcdir)/m4/pdns_with_geo.m4 \
+	$(top_srcdir)/m4/pdns_with_lmdb.m4 \
+	$(top_srcdir)/m4/pdns_with_lua.m4 \
+	$(top_srcdir)/m4/pdns_with_mysql.m4 \
+	$(top_srcdir)/m4/pdns_with_oracle.m4 \
+	$(top_srcdir)/m4/pdns_with_postgresql.m4 \
+	$(top_srcdir)/m4/pdns_with_system_polarssl.m4 \
+	$(top_srcdir)/m4/tm-gmtoff.m4 $(top_srcdir)/m4/warnings.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
@@ -163,16 +187,19 @@ am__relativize = \
     dir1=`echo "$$dir1" | sed -e "$$sed_rest"`; \
   done; \
   reldir="$$dir2"
-DIST_ARCHIVES = $(distdir).tar.gz
 GZIP_ENV = --best
+DIST_ARCHIVES = $(distdir).tar.bz2
 distuninstallcheck_listfiles = find . -type f -print
 am__distuninstallcheck_listfiles = $(distuninstallcheck_listfiles) \
   | sed 's|^\./|$(prefix)/|' | grep -v '$(infodir)/dir$$'
 distcleancheck_listfiles = find . -type f -print
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
+AM_CPPFLAGS = @AM_CPPFLAGS@
+AM_CXXFLAGS = @AM_CXXFLAGS@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
 AR = @AR@
+ASCIIDOC = @ASCIIDOC@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
@@ -200,6 +227,8 @@ CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
+CRYPTOPP_CFLAGS = @CRYPTOPP_CFLAGS@
+CRYPTOPP_LIBS = @CRYPTOPP_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
@@ -219,6 +248,8 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
+GEOIP_CFLAGS = @GEOIP_CFLAGS@
+GEOIP_LIBS = @GEOIP_LIBS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -231,14 +262,15 @@ LEX = @LEX@
 LEXLIB = @LEXLIB@
 LEX_OUTPUT_ROOT = @LEX_OUTPUT_ROOT@
 LIBCRYPT = @LIBCRYPT@
-LIBCURL_CFLAGS = @LIBCURL_CFLAGS@
-LIBCURL_LIBS = @LIBCURL_LIBS@
 LIBDL = @LIBDL@
 LIBLDAP = @LIBLDAP@
+LIBLMDB = @LIBLMDB@
 LIBOBJS = @LIBOBJS@
 LIBOPENDBX = @LIBOPENDBX@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
+LIBZMQ_CFLAGS = @LIBZMQ_CFLAGS@
+LIBZMQ_LIBS = @LIBZMQ_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
@@ -257,6 +289,8 @@ ORACLE_CFLAGS = @ORACLE_CFLAGS@
 ORACLE_LIBS = @ORACLE_LIBS@
 OTOOL = @OTOOL@
 OTOOL64 = @OTOOL64@
+P11KIT1_CFLAGS = @P11KIT1_CFLAGS@
+P11KIT1_LIBS = @P11KIT1_LIBS@
 PACKAGE = @PACKAGE@
 PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
 PACKAGE_NAME = @PACKAGE_NAME@
@@ -265,16 +299,21 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PGSQL_incdir = @PGSQL_incdir@
+PGSQL_inc = @PGSQL_inc@
 PGSQL_lib = @PGSQL_lib@
+PGSQL_pg_config = @PGSQL_pg_config@
+PIE_CFLAGS = @PIE_CFLAGS@
+PIE_LDFLAGS = @PIE_LDFLAGS@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 POLARSSL_CFLAGS = @POLARSSL_CFLAGS@
 POLARSSL_LIBS = @POLARSSL_LIBS@
 POLARSSL_SUBDIR = @POLARSSL_SUBDIR@
+RAGEL = @RAGEL@
 RANLIB = @RANLIB@
-REMOTEBACKEND_HTTP = @REMOTEBACKEND_HTTP@
+RELRO_LDFLAGS = @RELRO_LDFLAGS@
+REMOTEBACKEND_ZEROMQ = @REMOTEBACKEND_ZEROMQ@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -282,10 +321,10 @@ SQLITE3_CFLAGS = @SQLITE3_CFLAGS@
 SQLITE3_LIBS = @SQLITE3_LIBS@
 STRIP = @STRIP@
 THREADFLAGS = @THREADFLAGS@
-UNIXODBC_incdir = @UNIXODBC_incdir@
-UNIXODBC_lib = @UNIXODBC_lib@
 VERSION = @VERSION@
 YACC = @YACC@
+YAML_CFLAGS = @YAML_CFLAGS@
+YAML_LIBS = @YAML_LIBS@
 YFLAGS = @YFLAGS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -346,17 +385,20 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = modules codedocs @programdescend@
-DIST_SUBDIRS = modules codedocs pdns pdns/ext/rapidjson
-EXTRA_DIST = TODO README HACKING INSTALL debian-pdns/* pdns.spec  \
-codedocs/Makefile codedocs/doxygen.conf contrib/powerdns.solaris.init.d \
+DIST_SUBDIRS = modules codedocs pdns
+EXTRA_DIST = README INSTALL NOTICE debian-pdns pdns.spec  \
+codedocs/doxygen.conf contrib/powerdns.solaris.init.d \
 contrib/systemd-pdns.service contrib/systemd-pdns-recursor.service \
-bootstrap build-scripts/semistaticg++ pdns/docs/dnstcpbench.1
+bootstrap build-scripts/semistaticg++ pdns/docs/dnstcpbench.1 \
+pdns/docs/dnsdist.1 \
+build-scripts/redhat/pdns-server-test.spec \
+pdns/named.conf.parsertest regression-tests/zones/unit.test
 
 ACLOCAL_AMFLAGS = -I m4
 man8_MANS = pdns/docs/pdns_control.8 pdns/docs/pdnssec.8 \
 	pdns/docs/pdns_server.8 pdns/docs/zone2ldap.8 \
 	pdns/docs/zone2sql.8 $(am__append_1)
-@TOOLS_TRUE@man1_MANS = pdns/docs/dnstcpbench.1
+@TOOLS_TRUE@man1_MANS = pdns/docs/dnstcpbench.1 pdns/docs/dnsdist.1
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
@@ -717,7 +759,6 @@ distdir: $(DISTFILES)
 dist-gzip: distdir
 	tardir=$(distdir) && $(am__tar) | GZIP=$(GZIP_ENV) gzip -c >$(distdir).tar.gz
 	$(am__remove_distdir)
-
 dist-bzip2: distdir
 	tardir=$(distdir) && $(am__tar) | BZIP2=$${BZIP2--9} bzip2 -c >$(distdir).tar.bz2
 	$(am__remove_distdir)
@@ -748,7 +789,7 @@ dist-zip: distdir
 	$(am__remove_distdir)
 
 dist dist-all: distdir
-	tardir=$(distdir) && $(am__tar) | GZIP=$(GZIP_ENV) gzip -c >$(distdir).tar.gz
+	tardir=$(distdir) && $(am__tar) | BZIP2=$${BZIP2--9} bzip2 -c >$(distdir).tar.bz2
 	$(am__remove_distdir)
 
 # This target untars the dist file and tries a VPATH configuration.  Then
@@ -972,14 +1013,15 @@ uninstall-man: uninstall-man1 uninstall-man8
 pdns/docs/dnstcpbench.1:
 	cd pdns/docs && $(MAKE) dnstcpbench.1
 
+pdns/docs/dnsdist.1:
+	cd pdns/docs && $(MAKE) dnsdist.1
+
 install-exec-local: 
 	-@chmod +x pdns/pdns
-	-@chmod +x pdns/precursor
 	@echo "***********************************************************"
 	@echo
-	@echo init.d startup scripts have been made for you in pdns/pdns
-	@echo and in pdns/precursor
-	@echo You may want to copy these to /etc/init.d or equivalent
+	@echo An init.d startup script has been made for you in pdns/pdns.
+	@echo You may want to copy this to /etc/init.d or equivalent.
 	@echo
 	@echo "***********************************************************"
 

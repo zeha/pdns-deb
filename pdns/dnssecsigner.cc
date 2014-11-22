@@ -6,6 +6,10 @@
     it under the terms of the GNU General Public License version 2 as 
     published by the Free Software Foundation
 
+    Additionally, the license of this program contains a special
+    exception which allows to distribute the program in binary form when
+    it is linked against OpenSSL.
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -22,11 +26,12 @@
 #include "dnsseckeeper.hh"
 #include "dns_random.hh"
 #include "lock.hh"
+#include "arguments.hh"
 
 /* this is where the RRSIGs begin, keys are retrieved,
    but the actual signing happens in fillOutRRSIG */
 int getRRSIGsForRRSET(DNSSECKeeper& dk, const std::string& signer, const std::string signQName, uint16_t signQType, uint32_t signTTL, 
-		     vector<shared_ptr<DNSRecordContent> >& toSign, vector<RRSIGRecordContent>& rrcs, bool ksk)
+                     vector<shared_ptr<DNSRecordContent> >& toSign, vector<RRSIGRecordContent>& rrcs, bool ksk)
 {
   if(toSign.empty())
     return -1;
@@ -135,8 +140,7 @@ void fillOutRRSIG(DNSSECPrivateKey& dpk, const std::string& signQName, RRSIGReco
       rrc.d_signature=iter->second;
       return;
     }
-    else
-      ; // cerr<<"Miss!"<<endl;
+    // else cerr<<"Miss!"<<endl;  
   }
   
   rrc.d_signature = rc->sign(msg);
@@ -145,8 +149,10 @@ void fillOutRRSIG(DNSSECPrivateKey& dpk, const std::string& signQName, RRSIGReco
     WriteLock l(&g_signatures_lock);
     /* we add some jitter here so not all your slaves start pruning their caches at the very same millisecond */
     int weekno = (time(0) - dns_random(3600)) / (86400*7);  // we just spent milliseconds doing a signature, microsecond more won't kill us
+    const static int maxcachesize=::arg().asNum("max-signature-cache-entries", INT_MAX);
   
-    if(g_cacheweekno < weekno) {  // blunt but effective (C) Habbie
+    if(g_cacheweekno < weekno || g_signatures.size() >= (uint) maxcachesize) {  // blunt but effective (C) Habbie, mind04
+      L<<Logger::Warning<<"Cleared signature cache."<<endl;
       g_signatures.clear();
       g_cacheweekno = weekno;
     }

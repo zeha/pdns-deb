@@ -186,6 +186,13 @@ static const char *prevNextHashQueryDefaultSQL =
   "  get_hashed_prev_next(:zoneid, :hash, :unhashed, :prev, :next);\n"
   "END;";
 
+static const char *getAllZoneMetadataQueryKey = "PDNS_Get_All_Zone_Metadata";
+static const char *getAllZoneMetadataQueryDefaultSQL =
+  "SELECT md.meta_type, md.meta_content "
+  "FROM Zones z JOIN ZoneMetadata md ON z.id = md.zone_id "
+  "WHERE z.name = lower(:name) "
+  "ORDER BY md.meta_ind";
+
 static const char *getZoneMetadataQueryKey = "PDNS_Get_Zone_Metadata";
 static const char *getZoneMetadataQueryDefaultSQL =
   "SELECT md.meta_content "
@@ -212,6 +219,21 @@ static const char *getTSIGKeyQueryDefaultSQL =
   "SELECT algorithm, secret "
   "FROM TSIGKeys "
   "WHERE name = :name";
+
+static const char *delTSIGKeyQueryKey = "PDNS_Del_TSIG_Key";
+static const char *delTSIGKeyQueryDefaultSQL =
+  "DELETE FROM TSIGKeys "
+  "WHERE name = :name";
+
+static const char *setTSIGKeyQueryKey = "PDNS_Set_TSIG_Key";
+static const char *setTSIGKeyQueryDefaultSQL =
+  "INSERT INTO TSIGKeys (name, algorithm, secret) "
+  "VALUES (:name, :algorithm, :secret)";
+
+static const char *getTSIGKeysQueryKey = "PDNS_Get_TSIG_Keys";
+static const char *getTSIGKeysQueryDefaultSQL =
+  "SELECT name, algorithm, secret "
+  "FROM TSIGKeys";
 
 static const char *getZoneKeysQueryKey = "PDNS_Get_Zone_Keys";
 static const char *getZoneKeysQueryDefaultSQL =
@@ -305,10 +327,14 @@ OracleBackend::OracleBackend (const string &suffix, OCIEnv *envh,
   zoneSetNotifiedSerialQuerySQL = getArg("zone-set-notified-serial-query");
   prevNextNameQuerySQL = getArg("prev-next-name-query");
   prevNextHashQuerySQL = getArg("prev-next-hash-query");
+  getAllZoneMetadataQuerySQL = getArg("get-all-zone-metadata-query");
   getZoneMetadataQuerySQL = getArg("get-zone-metadata-query");
   delZoneMetadataQuerySQL = getArg("del-zone-metadata-query");
   setZoneMetadataQuerySQL = getArg("set-zone-metadata-query");
   getTSIGKeyQuerySQL = getArg("get-tsig-key-query");
+  delTSIGKeyQuerySQL = getArg("del-tsig-key-query");
+  setTSIGKeyQuerySQL = getArg("set-tsig-key-query");
+  getTSIGKeysQuerySQL = getArg("get-tsig-keys-query");
   getZoneKeysQuerySQL = getArg("get-zone-keys-query");
   delZoneKeyQuerySQL = getArg("del-zone-key-query");
   addZoneKeyQuerySQL = getArg("add-zone-key-query");
@@ -913,7 +939,7 @@ OracleBackend::setNotified (uint32_t zoneId, uint32_t serial)
 }
 
 bool
-OracleBackend::list (const string &domain, int zoneId)
+OracleBackend::list (const string &domain, int zoneId, bool include_disabled)
 {
   sword rc;
 
@@ -1124,7 +1150,8 @@ OracleBackend::abortTransaction ()
 bool
 OracleBackend::superMasterBackend (const string &ip, const string &domain,
                                    const vector<DNSResourceRecord> &nsset,
-                                   string *account, DNSBackend **backend)
+                                   string *nameserver, string *account,
+                                   DNSBackend **backend)
 {
   sword rc;
   OCIStmt *stmt;
@@ -1167,7 +1194,7 @@ OracleBackend::superMasterBackend (const string &ip, const string &domain,
 
 bool
 OracleBackend::createSlaveDomain(const string &ip, const string &domain,
-                                 const string &account)
+                                 const string &nameserver, const string &account)
 {
   sword rc;
   OCIStmt *insertSlaveQueryHandle;
@@ -1222,10 +1249,49 @@ OracleBackend::createSlaveDomain(const string &ip, const string &domain,
 }
 
 bool
+OracleBackend::getAllDomainMetadata (const string& name, std::map<string, vector<string> >& meta)
+{
+  DomainInfo di;
+  if (getDomainInfo(name, di) == false) return false;
+
+  sword rc;
+  OCIStmt *stmt;
+
+  stmt = prepare_query(pooledSvcCtx, getAllZoneMetadataQuerySQL, getAllZoneMetadataQueryKey);
+  bind_str_failokay(stmt, ":nsname", myServerName, sizeof(myServerName));
+  bind_str(stmt, ":name", mQueryName, sizeof(mQueryName));
+
+  define_output_str(stmt, 1, &mResultTypeInd, mResultType, sizeof(mResultType));
+  define_output_str(stmt, 2, &mResultContentInd, mResultContent, sizeof(mResultContent));
+
+  string_to_cbuf(mQueryName, name, sizeof(mQueryName));
+
+  rc = OCIStmtExecute(pooledSvcCtx, stmt, oraerr, 1, 0, NULL, NULL, OCI_DEFAULT);
+
+  while (rc != OCI_NO_DATA) {
+    if (rc == OCI_ERROR) {
+      throw OracleException("Oracle getAllDomainMetadata", oraerr);
+    }
+    check_indicator(mResultTypeInd, true);
+    check_indicator(mResultContentInd, true);
+
+    string kind = mResultType;
+    string content = mResultContent;
+    if (!isDnssecDomainMetadata(content))
+      meta[kind].push_back(content);
+
+    rc = OCIStmtFetch2(stmt, oraerr, 1, OCI_FETCH_NEXT, 0, OCI_DEFAULT);
+  }
+
+  release_query(stmt, getAllZoneMetadataQueryKey);
+  return true;
+}
+
+bool
 OracleBackend::getDomainMetadata (const string& name, const string& kind,
                                   vector<string>& meta)
 {
-  if(!d_dnssecQueries)
+  if(!d_dnssecQueries && isDnssecDomainMetadata(kind))
     return -1;
   DomainInfo di;
   if (getDomainInfo(name, di) == false) return false;
@@ -1265,7 +1331,7 @@ bool
 OracleBackend::setDomainMetadata(const string& name, const string& kind,
                                  const vector<string>& meta)
 {
-  if(!d_dnssecQueries)
+  if(!d_dnssecQueries && isDnssecDomainMetadata(kind))
     return -1;
   DomainInfo di;
   if (getDomainInfo(name, di) == false) return false;
@@ -1328,9 +1394,6 @@ OracleBackend::setDomainMetadata(const string& name, const string& kind,
 bool
 OracleBackend::getTSIGKey (const string& name, string* algorithm, string* content)
 {
-  if(!d_dnssecQueries)
-    return -1;
-
   sword rc;
   OCIStmt *stmt;
 
@@ -1343,19 +1406,141 @@ OracleBackend::getTSIGKey (const string& name, string* algorithm, string* conten
 
   rc = OCIStmtExecute(pooledSvcCtx, stmt, oraerr, 1, 0, NULL, NULL, OCI_DEFAULT);
 
-  if (rc == OCI_NO_DATA) {
-    return false;
+  content->clear();
+  while (rc != OCI_NO_DATA) {
+
+    if (rc == OCI_ERROR) {
+      throw OracleException("Oracle getTSIGKey", oraerr);
+    }
+
+    check_indicator(mResultTypeInd, false);
+    check_indicator(mResultContentInd, false);
+
+    if(algorithm->empty() || pdns_iequals(*algorithm, mResultType)) {
+      *algorithm = mResultType;
+      *content = mResultContent;
+    }
+
+    rc = OCIStmtFetch2(stmt, oraerr, 1, OCI_FETCH_NEXT, 0, OCI_DEFAULT);
   }
+
+  release_query(stmt, getTSIGKeyQueryKey);
+  return !content->empty();
+}
+
+bool
+OracleBackend::delTSIGKey(const string& name)
+{
+  sword rc;
+  OCIStmt *stmt;
+
+  openMasterConnection();
+  rc = OCITransStart(masterSvcCtx, oraerr, 60, OCI_TRANS_NEW);
+
+  stmt = prepare_query(masterSvcCtx, delTSIGKeyQuerySQL, delTSIGKeyQueryKey);
+  string_to_cbuf(mQueryName, name, sizeof(mQueryName));
+
+  bind_str(stmt, ":name", mQueryName, sizeof(mQueryName));
+
+  rc = OCIStmtExecute(masterSvcCtx, stmt, oraerr, 1, 0, NULL, NULL, OCI_DEFAULT);
 
   if (rc == OCI_ERROR) {
-    throw OracleException("Oracle getTSIGKey", oraerr);
+    throw OracleException("Oracle delTSIGKey", oraerr);
   }
 
-  check_indicator(mResultTypeInd, false);
-  check_indicator(mResultContentInd, false);
+  release_query(stmt, setTSIGKeyQueryKey);
 
-  *algorithm = mResultType;
-  *content = mResultContent;
+  rc = OCITransCommit(masterSvcCtx, oraerr, OCI_DEFAULT);
+  if (rc == OCI_ERROR) {
+    throw OracleException("Oracle delTSIGKey COMMIT", oraerr);
+  }
+  return true;
+}
+
+bool
+OracleBackend::setTSIGKey(const string& name, const string& algorithm, const string& content)
+{
+  sword rc;
+  OCIStmt *stmt;
+
+  openMasterConnection();
+
+  rc = OCITransStart(masterSvcCtx, oraerr, 60, OCI_TRANS_NEW);
+
+  if (rc == OCI_ERROR) {
+    throw OracleException("Oracle setTSIGKey BEGIN", oraerr);
+  }
+
+  stmt = prepare_query(masterSvcCtx, delTSIGKeyQuerySQL, delTSIGKeyQueryKey);
+  string_to_cbuf(mQueryName, name, sizeof(mQueryName));
+
+  bind_str(stmt, ":name", mQueryName, sizeof(mQueryName));
+
+  rc = OCIStmtExecute(masterSvcCtx, stmt, oraerr, 1, 0, NULL, NULL, OCI_DEFAULT);
+
+  if (rc == OCI_ERROR) {
+    throw OracleException("Oracle setTSIGKey DELETE", oraerr);
+  }
+
+  release_query(stmt, delTSIGKeyQueryKey);
+
+  stmt = prepare_query(masterSvcCtx, setTSIGKeyQuerySQL, setTSIGKeyQueryKey);
+  string_to_cbuf(mQueryName, name, sizeof(mQueryName));
+  string_to_cbuf(mQueryType, algorithm, sizeof(mQueryType));
+  string_to_cbuf(mQueryContent, content, sizeof(mQueryContent));
+
+  bind_str(stmt, ":name", mQueryName, sizeof(mQueryName));
+  bind_str(stmt, ":algorithm", mQueryType, sizeof(mQueryType));
+  bind_str(stmt, ":secret", mQueryContent, sizeof(mQueryContent));
+
+  rc = OCIStmtExecute(masterSvcCtx, stmt, oraerr, 1, 0, NULL, NULL, OCI_DEFAULT);
+
+  if (rc == OCI_ERROR) {
+    throw OracleException("Oracle setTSIGKey INSERT", oraerr);
+  }
+
+  release_query(stmt, setTSIGKeyQueryKey);
+
+  rc = OCITransCommit(masterSvcCtx, oraerr, OCI_DEFAULT);
+
+  if (rc == OCI_ERROR) {
+    throw OracleException("Oracle setTSIGKey COMMIT", oraerr);
+  }
+
+  return true;
+}
+
+bool
+OracleBackend::getTSIGKeys(std::vector< struct TSIGKey > &keys)
+{
+  sword rc;
+  OCIStmt *stmt;
+
+  stmt = prepare_query(pooledSvcCtx, getTSIGKeysQuerySQL, getTSIGKeysQueryKey);
+  define_output_str(stmt, 1, &mResultNameInd, mResultName, sizeof(mResultName));
+  define_output_str(stmt, 2, &mResultTypeInd, mResultType, sizeof(mResultType));
+  define_output_str(stmt, 3, &mResultContentInd, mResultContent, sizeof(mResultContent));
+
+  rc = OCIStmtExecute(pooledSvcCtx, stmt, oraerr, 1, 0, NULL, NULL, OCI_DEFAULT);
+
+  while (rc != OCI_NO_DATA) {
+    if (rc == OCI_ERROR) {
+      throw OracleException("Oracle getDomainMetadata", oraerr);
+    }
+
+    check_indicator(mResultNameInd, true);
+    check_indicator(mResultTypeInd, true);
+    check_indicator(mResultContentInd, true);
+
+    struct TSIGKey key;
+
+    key.name = mResultName;
+    key.algorithm = mResultType;
+    key.key = mResultContent;
+    keys.push_back(key);
+
+    rc = OCIStmtFetch2(stmt, oraerr, 1, OCI_FETCH_NEXT, 0, OCI_DEFAULT);
+  }
 
   release_query(stmt, getTSIGKeyQueryKey);
   return true;
@@ -2056,11 +2241,16 @@ OracleFactory () : BackendFactory("oracle") {
     declare(suffix, "prev-next-name-query", "", prevNextNameQueryDefaultSQL);
     declare(suffix, "prev-next-hash-query", "", prevNextHashQueryDefaultSQL);
 
+    declare(suffix, "get-all-zone-metadata-query", "", getAllZoneMetadataQueryDefaultSQL);
     declare(suffix, "get-zone-metadata-query", "", getZoneMetadataQueryDefaultSQL);
     declare(suffix, "del-zone-metadata-query", "", delZoneMetadataQueryDefaultSQL);
     declare(suffix, "set-zone-metadata-query", "", setZoneMetadataQueryDefaultSQL);
 
     declare(suffix, "get-tsig-key-query", "", getTSIGKeyQueryDefaultSQL);
+    declare(suffix, "del-tsig-key-query", "", delTSIGKeyQueryDefaultSQL);
+    declare(suffix, "set-tsig-key-query", "", setTSIGKeyQueryDefaultSQL);
+    declare(suffix, "get-tsig-keys-query", "", getTSIGKeysQueryDefaultSQL);
+
     declare(suffix, "get-zone-keys-query", "", getZoneKeysQueryDefaultSQL);
     declare(suffix, "del-zone-key-query", "", delZoneKeyQueryDefaultSQL);
     declare(suffix, "add-zone-key-query", "", addZoneKeyQueryDefaultSQL);
@@ -2089,6 +2279,7 @@ public:
   OracleLoader()
   {
     BackendMakers().report(new OracleFactory);
+    L << Logger::Info << "[oraclebackend] This is the oracle backend version " VERSION " (" __DATE__ ", " __TIME__ ") reporting" << endl;
   }
 
 };

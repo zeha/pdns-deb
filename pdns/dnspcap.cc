@@ -52,8 +52,10 @@ try
 {
   for(;;) {
     checkedFread(&d_pheader);
-    if(!d_pheader.caplen)
+    if(!d_pheader.caplen) {
+      d_runts++;
       continue;
+    }
 
     if(d_pheader.caplen > sizeof(d_buffer)) {
       d_oversized++;
@@ -71,7 +73,7 @@ try
     d_lcc=reinterpret_cast<struct pdns_lcc_header*>(d_buffer);
 
     d_ip=reinterpret_cast<struct ip*>(d_buffer + d_skipMediaHeader);
-
+    d_ip6=reinterpret_cast<struct ip6_hdr*>(d_buffer + d_skipMediaHeader);
     uint16_t contentCode=0;
     if(d_pfh.linktype==1) 
       contentCode=ntohs(d_ether->ether_type);
@@ -80,6 +82,13 @@ try
 
     if(contentCode==0x0800 && d_ip->ip_p==17) { // udp
       d_udp=reinterpret_cast<const struct udphdr*>(d_buffer + d_skipMediaHeader + 4 * d_ip->ip_hl);
+      d_payload = (unsigned char*)d_udp + sizeof(struct udphdr);
+      d_len = ntohs(d_udp->uh_ulen) - sizeof(struct udphdr);
+      d_correctpackets++;
+      return true;
+    }
+    if(contentCode==0x86dd && d_ip6->ip6_ctlun.ip6_un1.ip6_un1_nxt==17) { // udpv6, we ignore anything with extension hdr
+      d_udp=reinterpret_cast<const struct udphdr*>(d_buffer + d_skipMediaHeader + sizeof(struct ip6_hdr));
       d_payload = (unsigned char*)d_udp + sizeof(struct udphdr);
       d_len = ntohs(d_udp->uh_ulen) - sizeof(struct udphdr);
       d_correctpackets++;
@@ -94,6 +103,35 @@ catch(EofException) {
   return false;
 }
 
+ComboAddress PcapPacketReader::getSource() const
+{
+  ComboAddress ret;
+  if(d_ip->ip_v == 4) {
+    ret.sin4.sin_family = AF_INET;
+    ret.sin4.sin_addr = d_ip->ip_src;
+    ret.sin4.sin_port = d_udp->uh_sport; // should deal with TCP too!
+  } else {
+    ret.sin6.sin6_family = AF_INET6;
+    ret.sin6.sin6_addr = d_ip6->ip6_src;
+    ret.sin6.sin6_port = d_udp->uh_sport; // should deal with TCP too!
+  }
+  return ret;
+}
+
+ComboAddress PcapPacketReader::getDest() const
+{
+  ComboAddress ret;
+  if(d_ip->ip_v == 4) {
+    ret.sin4.sin_family = AF_INET;
+    ret.sin4.sin_addr = d_ip->ip_dst;
+    ret.sin4.sin_port = d_udp->uh_dport; // should deal with TCP too!
+  } else {
+    ret.sin6.sin6_family = AF_INET6;
+    ret.sin6.sin6_addr = d_ip6->ip6_dst;
+    ret.sin6.sin6_port = d_udp->uh_dport; // should deal with TCP too!
+  }
+  return ret;
+}
 
 PcapPacketWriter::PcapPacketWriter(const string& fname, PcapPacketReader& ppr) : d_fname(fname), d_ppr(ppr)
 {
@@ -101,12 +139,10 @@ PcapPacketWriter::PcapPacketWriter(const string& fname, PcapPacketReader& ppr) :
   if(!d_fp)
     unixDie("Unable to open file");
   
-  
   int flags=fcntl(fileno(d_fp),F_GETFL,0);
   fcntl(fileno(d_fp), F_SETFL,flags&(~O_NONBLOCK)); // bsd needs this in stdin (??)
 
   fwrite(&ppr.d_pfh, 1, sizeof(ppr.d_pfh), d_fp);
-  
 }
 
 void PcapPacketWriter::write()
