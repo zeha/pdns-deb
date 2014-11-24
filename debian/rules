@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 
 # Vendor and version
-version := $(shell dpkg-parsechangelog -SVersion).$(shell dpkg-vendor --query Vendor)
+version := $(shell dpkg-parsechangelog | awk '/^Version: /{ print $$2 }').$(shell dpkg-vendor --query Vendor)
 CXXFLAGS += -DPACKAGEVERSION='"$(version)"'
 
 # Backends
