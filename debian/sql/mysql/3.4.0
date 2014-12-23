@@ -13,7 +13,6 @@ ALTER TABLE domainmetadata ENGINE=InnoDB;
 ALTER TABLE cryptokeys ENGINE=InnoDB;
 ALTER TABLE tsigkeys ENGINE=InnoDB;
 
-DROP INDEX domainmetaidindex ON domainmetadata;
 CREATE INDEX domainmetadata_idx ON domainmetadata (domain_id, kind);
 
 CREATE TABLE comments (
