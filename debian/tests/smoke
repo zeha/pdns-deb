@@ -16,6 +16,7 @@ service pdns restart
 
 TMPFILE=$(mktemp)
 cleanup() {
+  service pdns stop
   rm -f "$TMPFILE"
 }
 trap cleanup EXIT
