@@ -1,3 +1,9 @@
+pdns (3.4.1-4+deb8u1) jessie-security; urgency=high
+
+  * Security update: apply patch for CVE-2015-1868
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Tue, 21 Apr 2015 21:50:31 +0200
+
 pdns (3.4.1-4) unstable; urgency=medium
 
   * Remove DROP INDEX domainmetaidindex from MySQL schema upgrade files.
