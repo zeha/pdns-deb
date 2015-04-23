@@ -461,33 +461,36 @@ speedtest_OBJECTS = $(am_speedtest_OBJECTS)
 speedtest_LDADD = $(LDADD)
 am__testrunner_SOURCES_DIST = testrunner.cc test-misc_hh.cc \
 	test-nameserver_cc.cc test-dnsrecords_cc.cc test-base32_cc.cc \
-	test-md5_hh.cc test-sha_hh.cc nameserver.cc misc.cc \
-	unix_utility.cc logger.cc statbag.cc arguments.cc qtype.cc \
-	dnspacket.cc dnswriter.cc base64.cc base32.cc dnsrecords.cc \
-	dnslabeltext.cc dnsparser.cc rcpgenerator.cc ednssubnet.cc \
-	nsecrecords.cc sillyrecords.cc dnssecinfra.cc \
-	test-base64_cc.cc test-iputils_hh.cc test-dns_random_hh.cc \
-	dns_random.cc test-rcpgenerator_cc.cc responsestats.cc \
-	test-bindparser_cc.cc bindparser.cc bindlexer.c \
-	test-zoneparser_tng_cc.cc zoneparser-tng.hh zoneparser-tng.cc \
-	dns.cc pkcs11signers.cc pkcs11signers.hh
+	test-md5_hh.cc packetcache.cc test-sha_hh.cc nameserver.cc \
+	test-packetcache_cc.cc misc.cc unix_utility.cc logger.cc \
+	statbag.cc arguments.cc qtype.cc dnspacket.cc dnswriter.cc \
+	base64.cc base32.cc dnsrecords.cc dnslabeltext.cc dnsparser.cc \
+	rcpgenerator.cc ednssubnet.cc nsecrecords.cc sillyrecords.cc \
+	dnssecinfra.cc test-base64_cc.cc test-iputils_hh.cc \
+	test-dns_random_hh.cc dns_random.cc test-rcpgenerator_cc.cc \
+	responsestats.cc test-bindparser_cc.cc test-statbag_cc.cc \
+	bindparser.cc bindlexer.c test-zoneparser_tng_cc.cc \
+	zoneparser-tng.hh zoneparser-tng.cc dns.cc pkcs11signers.cc \
+	pkcs11signers.hh
 am_testrunner_OBJECTS = testrunner.$(OBJEXT) test-misc_hh.$(OBJEXT) \
 	test-nameserver_cc.$(OBJEXT) test-dnsrecords_cc.$(OBJEXT) \
 	test-base32_cc.$(OBJEXT) test-md5_hh.$(OBJEXT) \
-	test-sha_hh.$(OBJEXT) nameserver.$(OBJEXT) misc.$(OBJEXT) \
-	unix_utility.$(OBJEXT) logger.$(OBJEXT) statbag.$(OBJEXT) \
-	arguments.$(OBJEXT) qtype.$(OBJEXT) dnspacket.$(OBJEXT) \
-	dnswriter.$(OBJEXT) base64.$(OBJEXT) base32.$(OBJEXT) \
-	dnsrecords.$(OBJEXT) dnslabeltext.$(OBJEXT) \
+	packetcache.$(OBJEXT) test-sha_hh.$(OBJEXT) \
+	nameserver.$(OBJEXT) test-packetcache_cc.$(OBJEXT) \
+	misc.$(OBJEXT) unix_utility.$(OBJEXT) logger.$(OBJEXT) \
+	statbag.$(OBJEXT) arguments.$(OBJEXT) qtype.$(OBJEXT) \
+	dnspacket.$(OBJEXT) dnswriter.$(OBJEXT) base64.$(OBJEXT) \
+	base32.$(OBJEXT) dnsrecords.$(OBJEXT) dnslabeltext.$(OBJEXT) \
 	dnsparser.$(OBJEXT) rcpgenerator.$(OBJEXT) \
 	ednssubnet.$(OBJEXT) nsecrecords.$(OBJEXT) \
 	sillyrecords.$(OBJEXT) dnssecinfra.$(OBJEXT) \
 	test-base64_cc.$(OBJEXT) test-iputils_hh.$(OBJEXT) \
 	test-dns_random_hh.$(OBJEXT) dns_random.$(OBJEXT) \
 	test-rcpgenerator_cc.$(OBJEXT) responsestats.$(OBJEXT) \
-	test-bindparser_cc.$(OBJEXT) bindparser.$(OBJEXT) \
-	bindlexer.$(OBJEXT) test-zoneparser_tng_cc.$(OBJEXT) \
-	zoneparser-tng.$(OBJEXT) dns.$(OBJEXT) $(am__objects_1)
+	test-bindparser_cc.$(OBJEXT) test-statbag_cc.$(OBJEXT) \
+	bindparser.$(OBJEXT) bindlexer.$(OBJEXT) \
+	test-zoneparser_tng_cc.$(OBJEXT) zoneparser-tng.$(OBJEXT) \
+	dns.$(OBJEXT) $(am__objects_1)
 testrunner_OBJECTS = $(am_testrunner_OBJECTS)
 testrunner_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2)
@@ -936,9 +939,9 @@ top_srcdir = @top_srcdir@
 YAHTTP_LIBS = -Lext/yahttp/yahttp -lyahttp
 AM_LFLAGS = -i
 AM_YFLAGS = -d --verbose --debug
-EXTRA_DIST = dnslabeltext.rl dnslabeltext.cc mtasker.cc inflighter.cc docs/pdns_control.8  \
-	docs/pdns_server.8 docs/zone2sql.8 docs/zone2ldap.8 docs/pdnssec.8 \
-	docs/dnsreplay.8 docs/dnsscope.8 docs/dnswasher.8 docs/pdnssec.8 docs/zone2ldap.8 \
+EXTRA_DIST = dnslabeltext.rl dnslabeltext.cc mtasker.cc inflighter.cc docs/pdns_control.1  \
+	docs/pdns_server.1 docs/zone2sql.1 docs/zone2ldap.1 docs/pdnssec.1 \
+	docs/dnsreplay.1 docs/dnsscope.1 docs/dnswasher.1 docs/pdnssec.1 docs/zone2ldap.1 \
 	bind-dnssec.schema.sqlite3.sql bindparser.h named.conf.parsertest
 
 SUBDIRS = ext
@@ -1139,16 +1142,16 @@ rec_control_SOURCES = rec_channel.cc rec_channel.hh rec_control.cc arguments.cc 
 
 testrunner_SOURCES = testrunner.cc test-misc_hh.cc \
 	test-nameserver_cc.cc test-dnsrecords_cc.cc test-base32_cc.cc \
-	test-md5_hh.cc test-sha_hh.cc nameserver.cc misc.cc \
-	unix_utility.cc logger.cc statbag.cc arguments.cc qtype.cc \
-	dnspacket.cc dnswriter.cc base64.cc base32.cc dnsrecords.cc \
-	dnslabeltext.cc dnsparser.cc rcpgenerator.cc ednssubnet.cc \
-	nsecrecords.cc sillyrecords.cc dnssecinfra.cc \
-	test-base64_cc.cc test-iputils_hh.cc test-dns_random_hh.cc \
-	dns_random.cc test-rcpgenerator_cc.cc responsestats.cc \
-	test-bindparser_cc.cc bindparser.cc bindlexer.c \
-	test-zoneparser_tng_cc.cc zoneparser-tng.hh zoneparser-tng.cc \
-	dns.cc $(am__append_32)
+	test-md5_hh.cc packetcache.cc test-sha_hh.cc nameserver.cc \
+	test-packetcache_cc.cc misc.cc unix_utility.cc logger.cc \
+	statbag.cc arguments.cc qtype.cc dnspacket.cc dnswriter.cc \
+	base64.cc base32.cc dnsrecords.cc dnslabeltext.cc dnsparser.cc \
+	rcpgenerator.cc ednssubnet.cc nsecrecords.cc sillyrecords.cc \
+	dnssecinfra.cc test-base64_cc.cc test-iputils_hh.cc \
+	test-dns_random_hh.cc dns_random.cc test-rcpgenerator_cc.cc \
+	responsestats.cc test-bindparser_cc.cc test-statbag_cc.cc \
+	bindparser.cc bindlexer.c test-zoneparser_tng_cc.cc \
+	zoneparser-tng.hh zoneparser-tng.cc dns.cc $(am__append_32)
 testrunner_LDFLAGS = $(DYNLINKFLAGS) $(THREADFLAGS) $(BOOST_UNIT_TEST_FRAMEWORK_LDFLAGS)
 testrunner_LDADD = $(POLARSSL_LIBS) $(BOOST_UNIT_TEST_FRAMEWORK_LIBS) \
 	$(am__append_33)
@@ -1519,8 +1522,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-md5_hh.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-misc_hh.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-nameserver_cc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-packetcache_cc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-rcpgenerator_cc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-sha_hh.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-statbag_cc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-zoneparser_tng_cc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/testrunner.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/toysdig.Po@am__quote@

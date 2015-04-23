@@ -50,6 +50,7 @@
 #endif 
  
 AtomicCounter PacketHandler::s_count;
+NetmaskGroup PacketHandler::s_allowNotifyFrom;
 extern string s_programname;
 
 enum root_referral {
@@ -58,7 +59,7 @@ enum root_referral {
     FULL_ROOT_REFERRAL
 };
 
-PacketHandler::PacketHandler():B(s_programname)
+PacketHandler::PacketHandler():B(s_programname), d_dk(&B)
 {
   ++s_count;
   d_doDNAME=::arg().mustDo("experimental-dname-processing");
@@ -756,6 +757,12 @@ int PacketHandler::processNotify(DNSPacket *p)
     L<<Logger::Error<<"Received NOTIFY for "<<p->qdomain<<" from "<<p->getRemote()<<" but slave support is disabled in the configuration"<<endl;
     return RCode::NotImp;
   }
+
+  if(!s_allowNotifyFrom.match((ComboAddress *) &p->d_remote )) {
+    L<<Logger::Notice<<"Received NOTIFY for "<<p->qdomain<<" from "<<p->getRemote()<<" but remote is not in allow-notify-from"<<endl;
+    return RCode::Refused;
+  }
+
   DNSBackend *db=0;
   DomainInfo di;
   di.serial = 0;
@@ -810,7 +817,7 @@ DNSPacket *PacketHandler::question(DNSPacket *p)
 
 
   if(p->d.rd) {
-    static unsigned int &rdqueries=*S.getPointer("rd-queries");  
+    static AtomicCounter &rdqueries=*S.getPointer("rd-queries");  
     rdqueries++;
   }
 
@@ -1007,7 +1014,12 @@ DNSPacket *PacketHandler::questionOrRecurse(DNSPacket *p, bool *shouldRecurse)
   }
   
   r=p->replyPacket();  // generate an empty reply packet, possibly with TSIG details inside
-  
+
+  if (p->qtype == QType::TKEY) {
+    this->tkeyHandler(p, r);
+    return r;
+  }
+
   try {    
 
     // XXX FIXME do this in DNSPacket::parse ?
@@ -1112,7 +1124,8 @@ DNSPacket *PacketHandler::questionOrRecurse(DNSPacket *p, bool *shouldRecurse)
         addRootReferral(r);
       }
       else {
-        DLOG(L<<Logger::Warning<<"setting 'No Error'"<<endl);
+        if (!retargetcount)
+          r->setRcode(RCode::Refused); // send REFUSED - but only on empty 'no idea'
       }
       goto sendit;
     }
@@ -1169,12 +1182,10 @@ DNSPacket *PacketHandler::questionOrRecurse(DNSPacket *p, bool *shouldRecurse)
     weDone = weRedirected = weHaveUnauth =  false;
     
     while(B.get(rr)) {
-      if (p->qtype.getCode() == QType::ANY) {
-        if (rr.qtype.getCode() == QType::RRSIG) // RRSIGS are added later any way.
-          continue; // TODO: this actually means addRRSig should check if the RRSig is already there.
-        if (!p->d_dnssecOk && (rr.qtype.getCode() == QType:: DNSKEY || rr.qtype.getCode() == QType::NSEC3PARAM))
-          continue; // Don't send dnssec info to non validating resolvers.
-      }
+      if (p->qtype.getCode() == QType::ANY && !p->d_dnssecOk && (rr.qtype.getCode() == QType:: DNSKEY || rr.qtype.getCode() == QType::NSEC3PARAM))
+        continue; // Don't send dnssec info to non validating resolvers.
+      if (rr.qtype.getCode() == QType::RRSIG) // RRSIGS are added later any way.
+        continue; // TODO: this actually means addRRSig should check if the RRSig is already there
 
       // cerr<<"Auth: "<<rr.auth<<", "<<(rr.qtype == p->qtype)<<", "<<rr.qtype.getName()<<endl;
       if((p->qtype.getCode() == QType::ANY || rr.qtype == p->qtype) && rr.auth) 
@@ -1340,3 +1351,62 @@ DNSPacket *PacketHandler::questionOrRecurse(DNSPacket *p, bool *shouldRecurse)
 
 }
 
+void PacketHandler::tkeyHandler(DNSPacket *p, DNSPacket *r) {
+  TKEYRecordContent tkey_in;
+  boost::shared_ptr<TKEYRecordContent> tkey_out(new TKEYRecordContent());
+  string label, lcLabel;
+
+  if (!p->getTKEYRecord(&tkey_in, &label)) {
+    L<<Logger::Error<<"TKEY request but no TKEY RR found"<<endl;
+    r->setRcode(RCode::FormErr);
+    return;
+  }
+
+  // retain original label for response
+  lcLabel = toLowerCanonic(label);
+
+  tkey_out->d_error = 0;
+  tkey_out->d_mode = tkey_in.d_mode;
+  tkey_out->d_algo = tkey_in.d_algo;
+  tkey_out->d_inception = time((time_t*)NULL);
+  tkey_out->d_expiration = tkey_out->d_inception+15;
+
+  if (tkey_in.d_mode == 3) {
+    tkey_out->d_error = 19; // BADMODE
+  } else if (tkey_in.d_mode == 5) {
+    if (p->d_havetsig == false) { // unauthenticated
+      if (p->d.opcode == Opcode::Update)
+        r->setRcode(RCode::Refused);
+      else
+        r->setRcode(RCode::NotAuth);
+      return;
+    }
+    tkey_out->d_error = 20; // BADNAME (because we have no support for anything here)
+  } else {
+    if (p->d_havetsig == false && tkey_in.d_mode != 2) { // unauthenticated
+      if (p->d.opcode == Opcode::Update)
+        r->setRcode(RCode::Refused);
+      else
+        r->setRcode(RCode::NotAuth);
+      return;
+    }
+    tkey_out->d_error = 19; // BADMODE
+  }
+
+  tkey_out->d_keysize = tkey_out->d_key.size();
+  tkey_out->d_othersize = tkey_out->d_other.size();
+
+  DNSRecord rec;
+  rec.d_label = label;
+  rec.d_ttl = 0;
+  rec.d_type = QType::TKEY;
+  rec.d_class = QClass::ANY;
+  rec.d_content = tkey_out;
+
+  DNSResourceRecord rr(rec);
+  rr.qclass = QClass::ANY;
+  rr.qtype = QType::TKEY;
+  rr.d_place = DNSResourceRecord::ANSWER;
+  r->addRecord(rr);
+  r->commitD();
+}
