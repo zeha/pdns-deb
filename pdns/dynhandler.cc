@@ -78,6 +78,7 @@ string DLPingHandler(const vector<string>&parts, Utility::pid_t ppid)
 }
 
 string DLShowHandler(const vector<string>&parts, Utility::pid_t ppid)
+try
 {
   extern StatBag S;
   string ret("Wrong number of parameters");
@@ -90,7 +91,10 @@ string DLShowHandler(const vector<string>&parts, Utility::pid_t ppid)
 
   return ret;
 }
-
+catch(...)
+{
+  return "Unknown";
+}
 
 void setStatus(const string &str)
 {
@@ -226,8 +230,8 @@ string DLNotifyRetrieveHandler(const vector<string>&parts, Utility::pid_t ppid)
 
   const string& domain=parts[1];
   DomainInfo di;
-  PacketHandler P;
-  if(!P.getBackend()->getDomainInfo(domain, di))
+  UeberBackend B;
+  if(!B.getDomainInfo(domain, di))
     return "Domain '"+domain+"' unknown";
   
   if(di.masters.empty())
@@ -262,24 +266,44 @@ string DLNotifyHostHandler(const vector<string>&parts, Utility::pid_t ppid)
 string DLNotifyHandler(const vector<string>&parts, Utility::pid_t ppid)
 {
   extern CommunicatorClass Communicator;
-  ostringstream os;
+  UeberBackend B;
   if(parts.size()!=2)
     return "syntax: notify domain";
   if(!::arg().mustDo("master"))
       return "PowerDNS not configured as master";
   L<<Logger::Warning<<"Notification request for domain '"<<parts[1]<<"' received from operator"<<endl;
-  if(!Communicator.notifyDomain(parts[1]))
-    return "Failed to add to the queue - see log";
-  return "Added to queue";
+
+  if (parts[1] == "*") {
+    vector<DomainInfo> domains;
+    B.getAllDomains(&domains);
+
+    int total = 0;
+    int notified = 0;
+    for (vector<DomainInfo>::const_iterator di=domains.begin(); di != domains.end(); di++) {
+      if (di->kind == 0) { // MASTER
+        total++;
+        if(Communicator.notifyDomain(di->zone))
+          notified++;
+      }
+    }
+
+    if (total != notified)
+      return itoa(notified)+" out of "+itoa(total)+" zones added to queue - see log";
+    return "Added "+itoa(total)+" MASTER zones to queue";
+  } else {
+    if(!Communicator.notifyDomain(parts[1]))
+      return "Failed to add to the queue - see log";
+    return "Added to queue";
+  }
 }
 
 string DLRediscoverHandler(const vector<string>&parts, Utility::pid_t ppid)
 {
-  PacketHandler P;
+  UeberBackend B;
   try {
     L<<Logger::Error<<"Rediscovery was requested"<<endl;
     string status="Ok";
-    P.getBackend()->rediscover(&status);
+    B.rediscover(&status);
     return status;
   }
   catch(PDNSException &ae) {
@@ -290,8 +314,8 @@ string DLRediscoverHandler(const vector<string>&parts, Utility::pid_t ppid)
 
 string DLReloadHandler(const vector<string>&parts, Utility::pid_t ppid)
 {
-  PacketHandler P;
-  P.getBackend()->reload();
+  UeberBackend B;
+  B.reload();
   L<<Logger::Error<<"Reload was requested"<<endl;
   return "Ok";
 }

@@ -278,7 +278,7 @@ bool Bind2Backend::feedRecord(const DNSResourceRecord &r, string *ordername)
   case QType::CNAME:
   case QType::NS:
     if(!stripDomainSuffix(&content, domain))
-      content+=".";
+      content=stripDot(content)+".";
     *d_of<<qname<<"\t"<<r.ttl<<"\t"<<r.qtype.getName()<<"\t"<<content<<endl;
     break;
   default:
@@ -516,9 +516,6 @@ void Bind2Backend::insertRecord(BB2DomainInfo& bb2, const string &qnameu, const 
     trim_left(bdr.content);
   }
   
-  if(bdr.qtype==QType::CNAME || bdr.qtype==QType::MX || bdr.qtype==QType::NS || bdr.qtype==QType::AFSDB)
-    bdr.content=toLowerCanonic(bdr.content); // I think this is wrong, the zoneparser should not come up with . terminated stuff XXX FIXME
-
   bdr.ttl=ttl;
   bdr.priority=prio;  
   records->insert(bdr);

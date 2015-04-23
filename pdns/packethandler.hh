@@ -64,6 +64,7 @@ public:
   DNSBackend *getBackend();
 
   int trySuperMasterSynchronous(DNSPacket *p);
+  static NetmaskGroup s_allowNotifyFrom;
 
 private:
   int trySuperMaster(DNSPacket *p);
@@ -100,7 +101,9 @@ private:
   bool tryWildcard(DNSPacket *p, DNSPacket*r, SOAData& sd, string &target, string &wildcard, bool& retargeted, bool& nodata);
   bool addDSforNS(DNSPacket* p, DNSPacket* r, SOAData& sd, const string& dsname);
   void completeANYRecords(DNSPacket *p, DNSPacket*r, SOAData& sd, const string &target);
-  
+
+  void tkeyHandler(DNSPacket *p, DNSPacket *r);
+
   static AtomicCounter s_count;
   static pthread_mutex_t s_rfc2136lock;
   bool d_doRecursion;
@@ -111,7 +114,7 @@ private:
   AuthLua* d_pdl;
 
   UeberBackend B; // every thread an own instance
-  DNSSECKeeper d_dk; // same, might even share B?
+  DNSSECKeeper d_dk; // B is shared with DNSSECKeeper
 };
 void emitNSEC3(DNSBackend& B, const NSEC3PARAMRecordContent& ns3prc, const SOAData& sd, const std::string& unhashed, const std::string& begin, const std::string& end, const std::string& toNSEC3, DNSPacket *r, int mode);
 bool getNSEC3Hashes(bool narrow, DNSBackend* db, int id, const std::string& hashed, bool decrement, string& unhashed, string& before, string& after, int mode=0);

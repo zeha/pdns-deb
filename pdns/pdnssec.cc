@@ -14,6 +14,7 @@
 #include "zoneparser-tng.hh"
 #include "signingpipe.hh"
 #include "dns_random.hh"
+#include <fstream>
 #ifdef HAVE_SQLITE3
 #include "ssqlite3.hh"
 #include "bind-dnssec.schema.sqlite3.sql.h"
@@ -339,6 +340,49 @@ bool rectifyZone(DNSSECKeeper& dk, const std::string& zone)
   return true;
 }
 
+void dbBench(const std::string& fname)
+{
+  ::arg().set("query-cache-ttl")="0";
+  ::arg().set("negquery-cache-ttl")="0";
+  UeberBackend B("default");
+
+  vector<string> domains;
+  if(!fname.empty()) {
+    ifstream ifs(fname.c_str());
+    if(!ifs) {
+      cerr<<"Could not open '"<<fname<<"' for reading domain names to query"<<endl;
+    }
+    string line;
+    while(getline(ifs,line)) {
+      trim(line);
+      domains.push_back(line);
+    }
+  }
+  if(domains.empty())
+    domains.push_back("powerdns.com");
+
+  int n=0;
+  DNSResourceRecord rr;
+  DTime dt;
+  dt.set();
+  unsigned int hits=0, misses=0;
+  for(; n < 10000; ++n) {
+    const string& domain = domains[random() % domains.size()];
+    B.lookup(QType(QType::NS), domain);
+    while(B.get(rr)) {
+      hits++;
+    }
+    B.lookup(QType(QType::A), boost::lexical_cast<string>(random())+"."+domain);
+    while(B.get(rr)) {
+    }
+    misses++;
+
+  }
+  cout<<0.001*dt.udiff()/n<<" millisecond/lookup"<<endl;
+  cout<<"Retrieved "<<hits<<" records, did "<<misses<<" queries which should have no match"<<endl;
+  cout<<"Packet cache reports: "<<S.read("query-cache-hit")<<" hits (should be 0) and "<<S.read("query-cache-miss") <<" misses"<<endl;
+}
+
 void rectifyAllZones(DNSSECKeeper &dk) 
 {
   UeberBackend B("default");
@@ -361,7 +405,15 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const std::string& zone)
     cout<<"Checked 0 records of '"<<zone<<"', 1 errors, 0 warnings."<<endl;
     return 1;
   }
+
+  NSEC3PARAMRecordContent ns3pr;
+  bool narrow = false;
+  bool haveNSEC3 = dk.getNSEC3PARAM(zone, &ns3pr, &narrow);
+  bool isOptOut=(haveNSEC3 && ns3pr.d_flags);
+
+  bool isSecure=dk.isSecuredZone(zone);
   bool presigned=dk.isPresigned(zone);
+
   sd.db->list(zone, sd.domain_id, true);
   DNSResourceRecord rr;
   uint64_t numrecords=0, numerrors=0, numwarnings=0;
@@ -439,11 +491,21 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const std::string& zone)
 
     content.str("");
     content<<rr.qname<<" "<<rr.qtype.getName();
+    if (rr.qtype.getCode() == QType::RRSIG) {
+      RRSIGRecordContent rrc(rr.content);
+      content<<" ("<<DNSRecordContent::NumberToType(rrc.d_type)<<")";
+    }
     ret = ttl.insert(pair<string, unsigned int>(toLower(content.str()), rr.ttl));
     if (ret.second == false && ret.first->second != rr.ttl) {
       cout<<"[Error] TTL mismatch in rrset: '"<<rr.qname<<" IN " <<rr.qtype.getName()<<" "<<rr.content<<"' ("<<ret.first->second<<" != "<<rr.ttl<<")"<<endl;
       numerrors++;
       continue;
+    }
+
+    if (isSecure && isOptOut && (rr.qname.size() && rr.qname[0] == '*') && (rr.qname.size() < 2 || rr.qname[1] == '.' )) {
+      cout<<"[Warning] wildcard record '"<<rr.qname<<" IN " <<rr.qtype.getName()<<" "<<rr.content<<"' is insecure"<<endl;
+      cout<<"[Info] Wildcard records in opt-out zones are insecure. Disable the opt-out flag for this zone to avoid this warning. Command: pdnssec set-nsec3 "<<zone<<endl;
+      numwarnings++;
     }
 
     if(pdns_iequals(rr.qname, zone)) {
@@ -873,6 +935,10 @@ bool showZone(DNSSECKeeper& dk, const std::string& zone)
     BOOST_FOREACH(DNSSECKeeper::keyset_t::value_type value, keyset) {
       string algname;
       algorithm2name(value.first.d_algorithm, algname);
+      if (value.first.getKey()->getBits() < 1) {
+        cout<<"ID = "<<value.second.id<<" ("<<(value.second.keyOrZone ? "KSK" : "ZSK")<<") <key missing or defunct>" <<endl;
+        continue;
+      }
       cout<<"ID = "<<value.second.id<<" ("<<(value.second.keyOrZone ? "KSK" : "ZSK")<<"), tag = "<<value.first.getDNSKEY().getTag();
       cout<<", algo = "<<(int)value.first.d_algorithm<<", bits = "<<value.first.getKey()->getBits()<<"\tActive: "<<value.second.active<< " ( " + algname + " ) "<<endl;
       if(value.second.keyOrZone || ::arg().mustDo("direct-dnskey") || g_verbose)
@@ -1127,6 +1193,7 @@ try
     cerr<<"add-zone-key ZONE zsk|ksk [bits] [active|passive]"<<endl;
     cerr<<"             [rsasha1|rsasha256|rsasha512|gost|ecdsa256|ecdsa384]"<<endl;
     cerr<<"                                   Add a ZSK or KSK to zone and specify algo&bits"<<endl;
+    cerr<<"bench-db [filename]                Bench database backend with queries, one domain per line"<<endl;
     cerr<<"check-zone ZONE                    Check a zone for correctness"<<endl;
     cerr<<"check-all-zones                    Check all zones for correctness"<<endl;
     cerr<<"create-bind-db FNAME               Create DNSSEC db for BIND backend (bind-dnssec-db)"<<endl;
@@ -1144,9 +1211,9 @@ try
     cerr<<"get-meta ZONE [kind kind ..]       Get zone metadata. If no KIND given, lists all known"<<endl;
     cerr<<"hash-zone-record ZONE RNAME        Calculate the NSEC3 hash for RNAME in ZONE"<<endl;
 #ifdef HAVE_P11KIT1
-    cerr<<"hsm assign zone zsk|ksk module slot pin label"<<endl<<
+    cerr<<"hsm assign zone algorithm ksk|zsk module slot pin label"<<endl<<
           "                                   Assign a hardware signing module to a ZONE"<<endl;
-    cerr<<"hsm create-key zone [bits]         Create a key using hardware signing module for ZONE (use assign first)"<<endl; 
+    cerr<<"hsm create-key zone key-id [bits]  Create a key using hardware signing module for ZONE (use assign first)"<<endl; 
     cerr<<"                                   bits defaults to 2048"<<endl;
 #endif
     cerr<<"increase-serial ZONE               Increases the SOA-serial by 1. Uses SOA-EDIT"<<endl;
@@ -1243,6 +1310,9 @@ try
     }
     UeberBackend B("default");
     exit(checkZone(dk, B, cmds[1]));
+  }
+  else if(cmds[0] == "bench-db") {
+    dbBench(cmds.size() > 1 ? cmds[1] : "");
   }
   else if (cmds[0] == "check-all-zones") {
     exit(checkAllZones(dk));
@@ -1481,18 +1551,23 @@ try
     string nsec3params =  cmds.size() > 2 ? cmds[2] : "1 0 1 ab";
     bool narrow = cmds.size() > 3 && cmds[3]=="narrow";
     NSEC3PARAMRecordContent ns3pr(nsec3params);
-    
-    string zone=cmds[1];
-    if(!dk.isSecuredZone(zone)) {
-      cerr<<"Zone '"<<zone<<"' is not secured, can't set NSEC3 parameters"<<endl;
-      exit(EXIT_FAILURE);
+
+    if (! dk.setNSEC3PARAM(cmds[1], ns3pr, narrow)) {
+      cerr<<"Cannot set NSEC3 param for " << cmds[1] << endl;
+      return 1;
     }
-    dk.setNSEC3PARAM(zone, ns3pr, narrow);
-    
+
     if (!ns3pr.d_flags)
-      cerr<<"NSEC3 set, please rectify-zone if your backend needs it"<<endl;
+      cerr<<"NSEC3 set, ";
     else
-      cerr<<"NSEC3 (opt-out) set, please rectify-zone if your backend needs it"<<endl;
+      cerr<<"NSEC3 (opt-out) set, ";
+
+    if(dk.isSecuredZone(cmds[1]))
+      cerr<<"please rectify your zone if your backend needs it"<<endl;
+    else
+      cerr<<"please secure and rectify your zone."<<endl;
+
+    return 0;
   }
   else if(cmds[0]=="set-presigned") {
     if(cmds.size() < 2) {
@@ -1924,6 +1999,7 @@ try
     if (cmds[1] == "assign") {
       DNSCryptoKeyEngine::storvector_t storvect;
       DomainInfo di;
+      std::vector<DNSBackend::KeyData> keys;
 
       if (cmds.size() < 9) {
         std::cout << "Usage: pdnssec hsm assign zone algorithm ksk|zsk module slot pin label" << std::endl;
@@ -1939,6 +2015,11 @@ try
       }
 
       int algorithm = shorthand2algorithm(cmds[3]);
+      if (algorithm<0) {
+        cerr << "Unable to use unknown algorithm '" << cmds[3] << "'" << std::endl;
+        return 1;
+      }
+
       int id;
       bool keyOrZone = (cmds[4] == "ksk" ? true : false);
       string module = cmds[5];
@@ -1959,12 +2040,43 @@ try
      dpk.d_flags = (keyOrZone ? 257 : 256);
      dpk.setKey(shared_ptr<DNSCryptoKeyEngine>(DNSCryptoKeyEngine::makeFromISCString(drc, iscString.str())));
  
+     // make sure this key isn't being reused.
+     B.getDomainKeys(zone, 0, keys);
+     id = -1;
+
+     BOOST_FOREACH(DNSBackend::KeyData& kd, keys) {
+       if (kd.content == iscString.str()) {
+         // it's this one, I guess...
+         id = kd.id;
+         break;
+       }
+     }
+
+     if (id > -1) {
+       cerr << "You have already assigned this key with ID=" << id << std::endl;
+       return 1;
+     }
+
      if (!(id = dk.addKey(zone, dpk))) {
        cerr << "Unable to assign module slot to zone" << std::endl;
        return 1;
      }
 
+     // figure out key id.
+
+     B.getDomainKeys(zone, 0, keys);
+
+     // validate which one got the key...
+     BOOST_FOREACH(DNSBackend::KeyData& kd, keys) {
+       if (kd.content == iscString.str()) {
+         // it's this one, I guess...
+         id = kd.id;
+         break;
+       }
+     }
+
      cerr << "Module " << module << " slot " << slot << " assigned to " << zone << " with key id " << id << endl;
+
      return 0;
     } else if (cmds[1] == "create-key") {
 
