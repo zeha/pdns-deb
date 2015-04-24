@@ -1,3 +1,10 @@
+pdns (3.4.1-4+deb8u1~bpo70+1) wheezy-backports; urgency=high
+
+  * Rebuild for wheezy-backports, including security fix for
+    CVE-2015-1868.
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Fri, 24 Apr 2015 13:31:16 +0200
+
 pdns (3.4.1-4+deb8u1) jessie-security; urgency=high
 
   * Security update: apply patch for CVE-2015-1868
