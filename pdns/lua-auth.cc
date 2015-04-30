@@ -101,6 +101,11 @@ bool AuthLua::axfrfilter(const ComboAddress& remote, const string& zone, const D
     if(!getFromTable("ttl", rr.ttl))
       rr.ttl=3600;
 
+    if(!getFromTable("priority", tmpnum))
+      rr.priority=0;
+    else
+      rr.priority=tmpnum;
+
     if(!getFromTable("qname", rr.qname))
       rr.qname = zone;
 
@@ -132,7 +137,11 @@ static DNSPacket* ldp_checkDNSPacket(lua_State *L) {
 
 static int ldp_setRcode(lua_State *L) {
   DNSPacket *p=ldp_checkDNSPacket(L);
+#if LUA_VERSION_NUM < 503
   int rcode = luaL_checkint(L, 2);
+#else
+  int rcode = (int)luaL_checkinteger(L, 2);
+#endif
   p->setRcode(rcode);
   return 0;
 }

@@ -27,11 +27,13 @@
 #include "dns_random.hh"
 #include "lock.hh"
 #include "arguments.hh"
+#include "statbag.hh"
+extern StatBag S;
 
 /* this is where the RRSIGs begin, keys are retrieved,
    but the actual signing happens in fillOutRRSIG */
-int getRRSIGsForRRSET(DNSSECKeeper& dk, const std::string& signer, const std::string signQName, uint16_t signQType, uint32_t signTTL, 
-                     vector<shared_ptr<DNSRecordContent> >& toSign, vector<RRSIGRecordContent>& rrcs, bool ksk)
+int getRRSIGsForRRSET(DNSSECKeeper& dk, const std::string& signer, const std::string signQName, uint16_t signQType, uint32_t signTTL,
+                     vector<shared_ptr<DNSRecordContent> >& toSign, vector<RRSIGRecordContent>& rrcs)
 {
   if(toSign.empty())
     return -1;
@@ -49,31 +51,36 @@ int getRRSIGsForRRSET(DNSSECKeeper& dk, const std::string& signer, const std::st
   // we sign the RRSET in toSign + the rrc w/o hash
   
   DNSSECKeeper::keyset_t keys = dk.getKeys(signer); // we don't want the . for the root!
-  vector<DNSSECPrivateKey> KSKs, ZSKs;
-  vector<DNSSECPrivateKey>* signingKeys;
-  
-  // if ksk==1, only get KSKs
-  // if ksk==0, get ZSKs, unless there is no ZSK, then get KSK
+  set<int> algoHasKSK, algoHasZSK;
+  vector<DNSSECPrivateKey> signingKeys;
+
   BOOST_FOREACH(DNSSECKeeper::keyset_t::value_type& keymeta, keys) {
-    rrc.d_algorithm = keymeta.first.d_algorithm;
-    if(!keymeta.second.active) 
+    if(keymeta.second.active) {
+      if(keymeta.second.keyOrZone)
+        algoHasKSK.insert(keymeta.first.d_algorithm);
+      else
+        algoHasZSK.insert(keymeta.first.d_algorithm);
+    }
+  }
+
+  BOOST_FOREACH(DNSSECKeeper::keyset_t::value_type& keymeta, keys) {
+    if(!keymeta.second.active)
       continue;
-      
-    if(keymeta.second.keyOrZone)
-      KSKs.push_back(keymeta.first);
-    else if(!ksk)
-      ZSKs.push_back(keymeta.first);
+
+    if(signQType == QType::DNSKEY) {
+      // skip ZSK, if this algorithm has a KSK
+      if(!keymeta.second.keyOrZone && algoHasKSK.count(keymeta.first.d_algorithm))
+        continue;
+    } else {
+      // skip KSK, if this algorithm has a ZSK
+      if(keymeta.second.keyOrZone && algoHasZSK.count(keymeta.first.d_algorithm))
+        continue;
+    }
+
+    signingKeys.push_back(keymeta.first);
   }
-  if(ksk)
-    signingKeys = &KSKs;
-  else {
-    if(ZSKs.empty())
-      signingKeys = &KSKs;
-    else
-      signingKeys =&ZSKs;
-  }
-  
-  BOOST_FOREACH(DNSSECPrivateKey& dpk, *signingKeys) {
+
+  BOOST_FOREACH(DNSSECPrivateKey& dpk, signingKeys) {
     fillOutRRSIG(dpk, signQName, rrc, toSign);
     rrcs.push_back(rrc);
   }
@@ -94,7 +101,7 @@ void addSignature(DNSSECKeeper& dk, DNSBackend& db, const std::string& signer, c
     dk.getPreRRSIGs(db, signer, signQName, wildcardname, QType(signQType), signPlace, outsigned, origTTL); // does it all
   }
   else {
-    if(getRRSIGsForRRSET(dk, signer, wildcardname.empty() ? signQName : wildcardname, signQType, signTTL, toSign, rrcs, signQType == QType::DNSKEY) < 0)  {
+    if(getRRSIGsForRRSET(dk, signer, wildcardname.empty() ? signQName : wildcardname, signQType, signTTL, toSign, rrcs) < 0)  {
       // cerr<<"Error signing a record!"<<endl;
       return;
     } 
@@ -121,8 +128,19 @@ typedef map<pair<string, string>, string> signaturecache_t;
 static signaturecache_t g_signatures;
 static int g_cacheweekno;
 
+AtomicCounter* g_signatureCount;
+
+uint64_t signatureCacheSize(const std::string& str)
+{
+  ReadLock l(&g_signatures_lock);
+  return g_signatures.size();
+}
+
 void fillOutRRSIG(DNSSECPrivateKey& dpk, const std::string& signQName, RRSIGRecordContent& rrc, vector<shared_ptr<DNSRecordContent> >& toSign) 
 {
+  if(!g_signatureCount)
+    g_signatureCount = S.getPointer("signatures");
+    
   DNSKEYRecordContent drc = dpk.getDNSKEY(); 
   const DNSCryptoKeyEngine* rc = dpk.getKey();
   rrc.d_tag = drc.getTag();
@@ -144,13 +162,13 @@ void fillOutRRSIG(DNSSECPrivateKey& dpk, const std::string& signQName, RRSIGReco
   }
   
   rrc.d_signature = rc->sign(msg);
-
+  (*g_signatureCount)++;
   if(doCache) {
-    WriteLock l(&g_signatures_lock);
     /* we add some jitter here so not all your slaves start pruning their caches at the very same millisecond */
     int weekno = (time(0) - dns_random(3600)) / (86400*7);  // we just spent milliseconds doing a signature, microsecond more won't kill us
     const static int maxcachesize=::arg().asNum("max-signature-cache-entries", INT_MAX);
-  
+
+    WriteLock l(&g_signatures_lock);
     if(g_cacheweekno < weekno || g_signatures.size() >= (uint) maxcachesize) {  // blunt but effective (C) Habbie, mind04
       L<<Logger::Warning<<"Cleared signature cache."<<endl;
       g_signatures.clear();
