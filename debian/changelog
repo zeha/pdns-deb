@@ -1,3 +1,9 @@
+pdns (3.4.4-2~bpo8+1) jessie-backports; urgency=medium
+
+  * Rebuild for jessie-backports.
+
+ -- Christian Hofstaedtler <zeha@debian.org>  Thu, 30 Apr 2015 20:21:48 +0200
+
 pdns (3.4.4-2) unstable; urgency=medium
 
   * Add performance patch from upstream's 3.4.x branch.
