@@ -1,7 +1,7 @@
 AC_PREREQ([2.61])
 
 dnl The following lines may be patched by set-version-auth.
-AC_INIT([pdns], [3.4.1])
+AC_INIT([pdns], [3.4.4])
 AC_SUBST([DIST_HOST], [jenkins@autotest.powerdns.com])
 dnl End patch area.
 
@@ -30,10 +30,16 @@ AS_IF([test "x$CXX" = "xno" || test "x$CXX:x$GXX" = "xg++:x"],
 
 AC_LANG([C++])
 
-AC_CC_PIE
-AC_CC_STACK_PROTECTOR
-AC_CC_PARAM_SSP_BUFFER_SIZE([4])
-AC_CC_D_FORTIFY_SOURCE
+AC_ARG_ENABLE([hardening], [
+  AS_HELP_STRING([--disable-hardening, disable compiler security checks])
+])
+AS_IF([test "x$enable_hardening" != "xno"], [
+  AC_CC_PIE
+  AC_CC_STACK_PROTECTOR
+  AC_CC_PARAM_SSP_BUFFER_SIZE([4])
+  AC_CC_D_FORTIFY_SOURCE
+  AC_LD_RELRO
+])
 
 AC_CHECK_FUNC([socket], [], [
  AC_CHECK_LIB([socket], [socket], [LIBS="-lsocket $LIBS"])
@@ -49,7 +55,6 @@ AC_PROG_LIBTOOL([disable-static])
 LT_INIT([disable-static])
 ])
 
-AC_LD_RELRO
 
 MC_TM_GMTOFF
 
@@ -62,6 +67,20 @@ eval full_libdir="\"$libdir\""
 
 # detect pkg-config explicitly
 PKG_PROG_PKG_CONFIG
+
+# check if we want a static build
+AC_MSG_CHECKING([whether we will be building static binaries])
+
+AC_ARG_ENABLE([static-binaries],
+  [AS_HELP_STRING([--enable-static-binaries],[build static binaries @<:@default=no@:>@])],
+  [static=$enableval],
+  [static=no],
+)
+AC_MSG_RESULT([$static])
+
+AS_IF([test "x$static" != "xno"], [
+  PKG_CONFIG="$PKG_CONFIG --static"
+])
 
 AC_CHECK_HEADERS(
 	[sys/mman.h],
@@ -194,24 +213,10 @@ PDNS_ENABLE_PKCS11
 PDNS_WITH_CRYPTOPP
 PDNS_ENABLE_REMOTEBACKEND_ZEROMQ
 
-AC_MSG_CHECKING([whether we should build static binaries])
 
-AC_ARG_ENABLE([static-binaries],
-  [AS_HELP_STRING([--enable-static-binaries],[build static binaries])],
-  [case "${enableval}" in
-    yes) static=true ;;
-    no)  static=false ;;
-    *) AC_MSG_ERROR(bad value ${enableval} for --enable-static-binaries) ;;
-   esac],
-   [debug=false]
-)
-AC_MSG_RESULT([$static])
-
-AM_CONDITIONAL([ALLSTATIC], [test "x$static" = "xtrue"])
-
-if test "x$static" = "xtrue"; then
+AS_IF([test "x$static" != "xno"], [
   LDFLAGS="-all-static $LDFLAGS"
-fi
+])
 
 modules="bind gmysql geo random"
 AC_ARG_WITH([modules],
@@ -345,9 +350,13 @@ for a in $dynmodules; do
   moduledirs="$moduledirs ${a}backend"
 done
 
-CFLAGS="$CFLAGS $PIE_CFLAGS"
-CXXFLAGS="$CXXFLAGS $PIE_CFLAGS"
-LDFLAGS="$LDFLAGS $RELRO_LDFLAGS"
+LDFLAGS="$RELRO_LDFLAGS $LDFLAGS"
+
+AS_IF([test "x$static" != "xyes"], [
+  CFLAGS="$PIE_CFLAGS $CFLAGS"
+  CXXFLAGS="$PIE_CFLAGS $CXXFLAGS"
+  LDFLAGS="$PIE_LDFLAGS $LDFLAGS"
+])
 
 AC_SUBST(LIBS)
 
@@ -365,8 +374,8 @@ AC_CONFIG_FILES([
   pdns/ext/Makefile
   pdns/ext/yahttp/Makefile
   pdns/ext/yahttp/yahttp/Makefile
-  pdns/ext/polarssl-1.3.2/Makefile
-  pdns/ext/polarssl-1.3.2/library/Makefile
+  pdns/ext/polarssl/Makefile
+  pdns/ext/polarssl/library/Makefile
   pdns/ext/rapidjson/Makefile
   modules/bindbackend/Makefile
   modules/db2backend/Makefile

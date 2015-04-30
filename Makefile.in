@@ -50,7 +50,9 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@TOOLS_TRUE@am__append_1 = pdns/docs/dnsreplay.8 pdns/docs/dnsscope.8 pdns/docs/dnswasher.8
+@TOOLS_TRUE@am__append_1 = pdns/docs/dnsreplay.1 pdns/docs/dnsscope.1 \
+@TOOLS_TRUE@	pdns/docs/dnswasher.1 pdns/docs/dnstcpbench.1 \
+@TOOLS_TRUE@	pdns/docs/dnsdist.1
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
@@ -142,10 +144,9 @@ am__uninstall_files_from_dir = { \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
 man1dir = $(mandir)/man1
-am__installdirs = "$(DESTDIR)$(man1dir)" "$(DESTDIR)$(man8dir)"
-man8dir = $(mandir)/man8
+am__installdirs = "$(DESTDIR)$(man1dir)"
 NROFF = nroff
-MANS = $(man1_MANS) $(man8_MANS)
+MANS = $(man1_MANS)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 AM_RECURSIVE_TARGETS = $(RECURSIVE_TARGETS:-recursive=) \
@@ -395,10 +396,9 @@ build-scripts/redhat/pdns-server-test.spec \
 pdns/named.conf.parsertest regression-tests/zones/unit.test
 
 ACLOCAL_AMFLAGS = -I m4
-man8_MANS = pdns/docs/pdns_control.8 pdns/docs/pdnssec.8 \
-	pdns/docs/pdns_server.8 pdns/docs/zone2ldap.8 \
-	pdns/docs/zone2sql.8 $(am__append_1)
-@TOOLS_TRUE@man1_MANS = pdns/docs/dnstcpbench.1 pdns/docs/dnsdist.1
+man1_MANS = pdns/docs/pdns_control.1 pdns/docs/pdnssec.1 \
+	pdns/docs/pdns_server.1 pdns/docs/zone2ldap.1 \
+	pdns/docs/zone2sql.1 $(am__append_1)
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
@@ -502,47 +502,6 @@ uninstall-man1:
 	} | sed -e 's,.*/,,;h;s,.*\.,,;s,^[^1][0-9a-z]*$$,1,;x' \
 	      -e 's,\.[0-9a-z]*$$,,;$(transform);G;s,\n,.,'`; \
 	dir='$(DESTDIR)$(man1dir)'; $(am__uninstall_files_from_dir)
-install-man8: $(man8_MANS)
-	@$(NORMAL_INSTALL)
-	@list1='$(man8_MANS)'; \
-	list2=''; \
-	test -n "$(man8dir)" \
-	  && test -n "`echo $$list1$$list2`" \
-	  || exit 0; \
-	echo " $(MKDIR_P) '$(DESTDIR)$(man8dir)'"; \
-	$(MKDIR_P) "$(DESTDIR)$(man8dir)" || exit 1; \
-	{ for i in $$list1; do echo "$$i"; done;  \
-	if test -n "$$list2"; then \
-	  for i in $$list2; do echo "$$i"; done \
-	    | sed -n '/\.8[a-z]*$$/p'; \
-	fi; \
-	} | while read p; do \
-	  if test -f $$p; then d=; else d="$(srcdir)/"; fi; \
-	  echo "$$d$$p"; echo "$$p"; \
-	done | \
-	sed -e 'n;s,.*/,,;p;h;s,.*\.,,;s,^[^8][0-9a-z]*$$,8,;x' \
-	      -e 's,\.[0-9a-z]*$$,,;$(transform);G;s,\n,.,' | \
-	sed 'N;N;s,\n, ,g' | { \
-	list=; while read file base inst; do \
-	  if test "$$base" = "$$inst"; then list="$$list $$file"; else \
-	    echo " $(INSTALL_DATA) '$$file' '$(DESTDIR)$(man8dir)/$$inst'"; \
-	    $(INSTALL_DATA) "$$file" "$(DESTDIR)$(man8dir)/$$inst" || exit $$?; \
-	  fi; \
-	done; \
-	for i in $$list; do echo "$$i"; done | $(am__base_list) | \
-	while read files; do \
-	  test -z "$$files" || { \
-	    echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(man8dir)'"; \
-	    $(INSTALL_DATA) $$files "$(DESTDIR)$(man8dir)" || exit $$?; }; \
-	done; }
-
-uninstall-man8:
-	@$(NORMAL_UNINSTALL)
-	@list='$(man8_MANS)'; test -n "$(man8dir)" || exit 0; \
-	files=`{ for i in $$list; do echo "$$i"; done; \
-	} | sed -e 's,.*/,,;h;s,.*\.,,;s,^[^8][0-9a-z]*$$,8,;x' \
-	      -e 's,\.[0-9a-z]*$$,,;$(transform);G;s,\n,.,'`; \
-	dir='$(DESTDIR)$(man8dir)'; $(am__uninstall_files_from_dir)
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run `make' without going through this Makefile.
@@ -883,7 +842,7 @@ check: check-recursive
 all-am: Makefile $(MANS) config.h
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(man1dir)" "$(DESTDIR)$(man8dir)"; do \
+	for dir in "$(DESTDIR)$(man1dir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-recursive
@@ -954,7 +913,7 @@ install-info: install-info-recursive
 
 install-info-am:
 
-install-man: install-man1 install-man8
+install-man: install-man1
 
 install-pdf: install-pdf-recursive
 
@@ -986,7 +945,7 @@ ps-am:
 
 uninstall-am: uninstall-man
 
-uninstall-man: uninstall-man1 uninstall-man8
+uninstall-man: uninstall-man1
 
 .MAKE: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) all \
 	ctags-recursive install-am install-strip tags-recursive
@@ -1001,13 +960,12 @@ uninstall-man: uninstall-man1 uninstall-man8
 	install install-am install-data install-data-am install-dvi \
 	install-dvi-am install-exec install-exec-am install-exec-local \
 	install-html install-html-am install-info install-info-am \
-	install-man install-man1 install-man8 install-pdf \
-	install-pdf-am install-ps install-ps-am install-strip \
-	installcheck installcheck-am installdirs installdirs-am \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-recursive uninstall uninstall-am uninstall-man \
-	uninstall-man1 uninstall-man8
+	install-man install-man1 install-pdf install-pdf-am install-ps \
+	install-ps-am install-strip installcheck installcheck-am \
+	installdirs installdirs-am maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-generic \
+	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-recursive \
+	uninstall uninstall-am uninstall-man uninstall-man1
 
 
 pdns/docs/dnstcpbench.1:
